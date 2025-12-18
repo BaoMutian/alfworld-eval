@@ -146,7 +146,8 @@ class ReActAgent:
                 result.observations.append(obs)
 
                 if self.debug:
-                    log_step_interaction(step + 1, user_prompt, response, action, obs)
+                    log_step_interaction(
+                        step + 1, user_prompt, response, action, obs)
                     print(format_step_info(step + 1, action, obs))
 
                 history.append((action, obs))

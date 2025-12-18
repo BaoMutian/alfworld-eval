@@ -9,9 +9,8 @@ Based on official ALFWorld command format:
 """
 
 # Static few-shot examples covering different task types
-FEW_SHOT_EXAMPLES = """Example 1: Examine an alarm clock under a desk lamp
+FEW_SHOT_EXAMPLES = """Example 1: 
 
-> look
 You are in the middle of a room. Looking quickly around you, you see a bed 1, a desk 1, a desklamp 1, a drawer 1.
 Your task is to: examine the alarmclock with the desklamp.
 
@@ -36,9 +35,8 @@ Task completed!
 
 ---
 
-Example 2: Clean a mug and put it in the coffee machine
+Example 2: 
 
-> look
 You are in the middle of a room. Looking quickly around you, you see a cabinet 1, a coffeemachine 1, a countertop 1, a fridge 1, a sinkbasin 1.
 Your task is to: clean some mug and put it in coffeemachine.
 
@@ -78,54 +76,4 @@ Action: move mug 1 to coffeemachine 1
 > move mug 1 to coffeemachine 1
 You put the mug 1 in/on the coffeemachine 1.
 Task completed!
-
----
-
-Example 3: Heat an egg and put it in the fridge
-
-> look
-You are in the middle of a room. Looking quickly around you, you see a countertop 1, a fridge 1, a microwave 1.
-Your task is to: heat some egg and put it in fridge.
-
-Think: I need to find an egg, heat it with the microwave, then put it in the fridge. Let me check the fridge first.
-Action: go to fridge 1
-
-> go to fridge 1
-The fridge 1 is closed.
-
-Think: The fridge is closed. Let me open it.
-Action: open fridge 1
-
-> open fridge 1
-You open the fridge 1. The fridge 1 is open. In it, you see an egg 1, a tomato 1.
-
-Think: I found an egg. Let me take it.
-Action: take egg 1 from fridge 1
-
-> take egg 1 from fridge 1
-You pick up the egg 1 from the fridge 1.
-
-Think: Now I need to heat the egg with the microwave.
-Action: go to microwave 1
-
-> go to microwave 1
-The microwave 1 is closed.
-
-Think: I'm at the microwave. Let me heat the egg.
-Action: heat egg 1 with microwave 1
-
-> heat egg 1 with microwave 1
-You heat the egg 1 using the microwave 1.
-
-Think: The egg is heated. Now I need to put it back in the fridge.
-Action: go to fridge 1
-
-> go to fridge 1
-The fridge 1 is open. In it, you see a tomato 1.
-
-Think: I'm at the fridge. Let me put the heated egg inside.
-Action: move egg 1 to fridge 1
-
-> move egg 1 to fridge 1
-You put the egg 1 in/on the fridge 1.
-Task completed!"""
+"""

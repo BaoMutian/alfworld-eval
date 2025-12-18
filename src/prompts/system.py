@@ -11,9 +11,7 @@ _SYSTEM_PROMPT_BASE = """You are an intelligent agent operating in a household e
 ENVIRONMENT RULES
 ==================================================
 1. You can only carry ONE object at a time
-2. You must "go to" a location before interacting with objects there
-3. Some containers (fridge, drawer, cabinet) must be opened before you can see/take items inside
-4. Use exact object names with numbers (e.g., "apple 1", "fridge 1")
+2. Use exact object names with numbers (e.g., "apple 1", "fridge 1")
 
 ==================================================
 AVAILABLE COMMANDS
@@ -51,8 +49,7 @@ Action: <exact command from the list above>
 IMPORTANT:
 - Always include both "Think:" and "Action:" sections
 - The action must be a valid command with exact object/receptacle names
-- If stuck, use "check valid actions" to see available options
-- If an action fails, try a different approach"""
+- If stuck, use "check valid actions" to see available options"""
 
 # System prompt with few-shot examples
 SYSTEM_PROMPT_WITH_EXAMPLES = _SYSTEM_PROMPT_BASE + """

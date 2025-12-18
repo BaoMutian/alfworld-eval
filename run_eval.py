@@ -41,7 +41,8 @@ Examples:
     parser.add_argument("--model", "-m", type=str, help="Model name")
     parser.add_argument("--api-base", type=str, help="API base URL")
     parser.add_argument("--api-key", type=str, help="API key")
-    parser.add_argument("--temperature", type=float, help="Sampling temperature")
+    parser.add_argument("--temperature", type=float,
+                        help="Sampling temperature")
 
     # Test settings
     parser.add_argument("--num-games", "-n", type=int, help="Number of games")
@@ -51,21 +52,27 @@ Examples:
         choices=["valid_seen", "valid_train", "valid_unseen", "train"],
         help="Dataset split",
     )
-    parser.add_argument("--task-types", "-t", type=int, nargs="+", help="Task types (1-6)")
+    parser.add_argument("--task-types", "-t", type=int,
+                        nargs="+", help="Task types (1-6)")
     parser.add_argument("--max-steps", type=int, help="Max steps per game")
     parser.add_argument("--seed", type=int, help="Random seed")
 
     # Prompt settings
-    parser.add_argument("--no-few-shot", action="store_true", help="Disable few-shot examples")
-    parser.add_argument("--history-length", type=int, help="History entries to include")
+    parser.add_argument("--no-few-shot", action="store_true",
+                        help="Disable few-shot examples")
+    parser.add_argument("--history-length", type=int,
+                        help="History entries to include")
 
     # Runtime settings
     parser.add_argument("--workers", "-w", type=int, help="Parallel workers")
-    parser.add_argument("--output-dir", "-o", type=str, help="Output directory")
-    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode")
+    parser.add_argument("--output-dir", "-o", type=str,
+                        help="Output directory")
+    parser.add_argument("--debug", "-d", action="store_true",
+                        help="Enable debug mode")
 
     # Data settings
-    parser.add_argument("--data-path", type=str, help="ALFWorld data directory")
+    parser.add_argument("--data-path", type=str,
+                        help="ALFWorld data directory")
 
     return parser.parse_args()
 

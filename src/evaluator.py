@@ -79,7 +79,8 @@ class Evaluator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.run_id = generate_run_id(config)
-        self.checkpoint_path = self.output_dir / f"{self.run_id}_checkpoint.json"
+        self.checkpoint_path = self.output_dir / \
+            f"{self.run_id}_checkpoint.json"
         self.results_path = self.output_dir / f"{self.run_id}_results.json"
         self.debug_log_path = self.output_dir / f"{self.run_id}_debug.log"
 
@@ -111,7 +112,8 @@ class Evaluator:
                 self._success_steps += result.steps
 
         if self._completed_game_ids:
-            print(f"{Colors.info('Checkpoint found:')} {len(self._completed_game_ids)} games completed")
+            print(
+                f"{Colors.info('Checkpoint found:')} {len(self._completed_game_ids)} games completed")
 
     def _save_checkpoint(self) -> None:
         """Save current checkpoint."""
@@ -179,14 +181,17 @@ class Evaluator:
         print(Colors.highlight("=" * 60))
         print(f"  Model:    {Colors.info(self.config.llm.model)}")
         print(f"  Split:    {Colors.info(self.config.test.split)}")
-        print(f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
-        print(f"  Workers:  {Colors.info(str(self.config.runtime.parallel_workers))}")
+        print(
+            f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
+        print(
+            f"  Workers:  {Colors.info(str(self.config.runtime.parallel_workers))}")
         print(f"  Run ID:   {Colors.dim(self.run_id)}")
         print(Colors.highlight("=" * 60))
         print()
 
         if self.config.runtime.debug:
-            log_system_prompt(get_system_prompt(self.config.prompt.use_few_shot))
+            log_system_prompt(get_system_prompt(
+                self.config.prompt.use_few_shot))
 
         self._load_checkpoint()
 
@@ -208,13 +213,15 @@ class Evaluator:
                     f"{Colors.warning(str(len(remaining_files)))} remaining"
                 )
             else:
-                print(f"Remaining: {Colors.warning(str(len(remaining_files)))}")
+                print(
+                    f"Remaining: {Colors.warning(str(len(remaining_files)))}")
             print()
 
             completed_since_save = 0
 
             with ThreadPoolExecutor(max_workers=self.config.runtime.parallel_workers) as executor:
-                futures = {executor.submit(self._run_game_wrapper, f): f for f in remaining_files}
+                futures = {executor.submit(
+                    self._run_game_wrapper, f): f for f in remaining_files}
 
                 with tqdm(
                     total=len(remaining_files),
@@ -232,7 +239,8 @@ class Evaluator:
                                 completed_since_save += 1
 
                                 completed, successes, success_steps = self._get_progress()
-                                progress_str = format_progress(completed, total_games, successes, success_steps)
+                                progress_str = format_progress(
+                                    completed, total_games, successes, success_steps)
                                 result_str = format_game_result(result)
 
                                 tqdm.write(f"{progress_str} | {result_str}")
@@ -250,7 +258,8 @@ class Evaluator:
         self._save_checkpoint()
 
         timestamp = get_timestamp().replace(":", "-")
-        final_results_path = self.output_dir / f"{self.run_id}_{timestamp}_results.json"
+        final_results_path = self.output_dir / \
+            f"{self.run_id}_{timestamp}_results.json"
 
         save_results(
             results=self._results,
@@ -281,8 +290,10 @@ class Evaluator:
             else Colors.BRIGHT_RED
         )
         print(f"  Total games:     {summary['total_games']}")
-        print(f"  Successes:       {Colors.success(str(summary['successes']))}")
-        print(f"  Success rate:    {rate_color}{summary['success_rate']:.2%}{Colors.RESET}")
+        print(
+            f"  Successes:       {Colors.success(str(summary['successes']))}")
+        print(
+            f"  Success rate:    {rate_color}{summary['success_rate']:.2%}{Colors.RESET}")
         print(f"  Avg steps:       {summary['avg_steps']:.1f}")
         print(f"  Success avg:     {summary['success_avg_steps']:.1f}")
 
