@@ -426,12 +426,10 @@ Must be valid command from ENVIRONMENT INSTRUCTIONS with exact names from RECENT
     5. 是否提供 few-shot 示例
     6. 随机数种子
     7. 结果保存目录
-    8. 并行测试数（逐条测试太慢，提高评测效率）
-    9. 开启调试模式（结构化打印输入给LLM的prompt和LLM原始回复，以及必要的详细过程追踪信息）
+    8. 开启调试模式（结构化打印输入给LLM的prompt和LLM原始回复，以及必要的详细过程追踪信息）
 3. LLM服务采用OpenAI兼容格式，需要加入错误检测与重试机制以具备一定的鲁棒性。用户只需提供API_BASE_URL和 API_KEY，并指定必要的推理时参数即可（temperature, max_tokens, max_retries, wait_interval等）
-4. 实现并行测试功能（重要！）：必须确保并行不会出现混乱，将原先逐条测试变成N条任务实例并行测试，当使用vLLM部署大模型服务时能显著提高效率。
-5. 定时保存运行结果，并实现断点续传功能。
-6. 使用日志功能，终端打印信息能清晰追踪实时评估状态。
+4. 定时保存运行结果，并实现断点续传功能。
+5. 使用日志功能，终端打印信息能清晰追踪实时评估状态。
 
 
 

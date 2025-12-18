@@ -2,40 +2,38 @@
 
 # LLM Service Configuration
 llm:
-  api_base_url: "https://openrouter.ai/api/v1"  # OpenAI-compatible endpoint
-  api_key: "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"  # Set via environment variable OPENAI_API_KEY or here
+  api_base_url: "https://openrouter.ai/api/v1"
+  api_key: "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"
   model: "qwen/qwen-2.5-72b-instruct"
   temperature: 0.3
   max_tokens: 1024
-  timeout: 60  # seconds
+  timeout: 60
 
 # Retry Configuration
 retry:
   max_retries: 3
-  retry_interval: 1.0  # seconds, will use exponential backoff
-  max_retry_interval: 8.0  # max wait time between retries
+  retry_interval: 1.0
+  max_retry_interval: 8.0
 
 # Test Configuration
 test:
-  num_games: 10  # null means all games in the split
+  num_games: 10
   task_types: null  # null means all types, or list like [1, 2, 3, 4, 5, 6]
-  split: "valid_seen"  # valid_seen, valid_train, valid_unseen
+  split: "valid_seen"
   seed: 42
-  max_steps: 30  # max steps per game
+  max_steps: 30
 
 # Prompt Configuration
 prompt:
   use_few_shot: true
-  history_length: 30  # number of recent (action, observation) pairs to keep
+  history_length: 30
 
 # Runtime Configuration
 runtime:
-  parallel_workers: 2  # number of parallel workers
-  save_interval: 2  # save checkpoint every N completed games
-  output_dir: "results"  # output directory for results
-  debug: false  # print detailed prompts and responses
+  save_interval: 2
+  output_dir: "results"
+  debug: false
 
 # Data Configuration
 data:
-  alfworld_data_path: "./alfworld_data"  # path to ALFWorld data
-
+  alfworld_data_path: "./alfworld_data"

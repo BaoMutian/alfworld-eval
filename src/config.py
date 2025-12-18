@@ -47,7 +47,6 @@ class PromptConfig:
 @dataclass
 class RuntimeConfig:
     """Runtime configuration."""
-    parallel_workers: int = 4
     save_interval: int = 10
     output_dir: str = "results"
     debug: bool = False
@@ -74,14 +73,14 @@ class Config:
         """Load configuration from YAML file."""
         with open(yaml_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        
+
         return cls._from_dict(data)
 
     @classmethod
     def _from_dict(cls, data: dict) -> "Config":
         """Create configuration from dictionary."""
         config = cls()
-        
+
         if "llm" in data:
             config.llm = LLMConfig(**data["llm"])
         if "retry" in data:
@@ -91,10 +90,12 @@ class Config:
         if "prompt" in data:
             config.prompt = PromptConfig(**data["prompt"])
         if "runtime" in data:
-            config.runtime = RuntimeConfig(**data["runtime"])
+            # Filter out parallel_workers if present (deprecated)
+            runtime_data = {k: v for k, v in data["runtime"].items() if k != "parallel_workers"}
+            config.runtime = RuntimeConfig(**runtime_data)
         if "data" in data:
             config.data = DataConfig(**data["data"])
-        
+
         return config
 
     def validate(self) -> None:
@@ -106,24 +107,24 @@ class Config:
                 "API key not set. Set it in config or OPENAI_API_KEY environment variable."
             )
         self.llm.api_key = api_key
-        
+
         # Check data path
         data_path = Path(self.data.alfworld_data_path)
         if not data_path.exists():
             raise ValueError(f"ALFWorld data path does not exist: {data_path}")
-        
+
         # Check split
         valid_splits = ["valid_seen", "valid_train", "valid_unseen", "train"]
         if self.test.split not in valid_splits:
             raise ValueError(f"Invalid split: {self.test.split}. Must be one of {valid_splits}")
-        
+
         # Check task types
         valid_task_types = [1, 2, 3, 4, 5, 6]
         if self.test.task_types is not None:
             for t in self.test.task_types:
                 if t not in valid_task_types:
                     raise ValueError(f"Invalid task type: {t}. Must be one of {valid_task_types}")
-        
+
         # Create output directory
         Path(self.runtime.output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -154,7 +155,6 @@ class Config:
                 "history_length": self.prompt.history_length,
             },
             "runtime": {
-                "parallel_workers": self.runtime.parallel_workers,
                 "save_interval": self.runtime.save_interval,
                 "output_dir": self.runtime.output_dir,
                 "debug": self.runtime.debug,
@@ -167,10 +167,10 @@ class Config:
 
 def load_config(config_path: Optional[str] = None) -> Config:
     """Load and validate configuration.
-    
+
     Args:
         config_path: Path to YAML config file. If None, uses default config.
-        
+
     Returns:
         Validated Config object.
     """
@@ -183,7 +183,6 @@ def load_config(config_path: Optional[str] = None) -> Config:
             config = Config()
     else:
         config = Config.from_yaml(config_path)
-    
+
     config.validate()
     return config
-

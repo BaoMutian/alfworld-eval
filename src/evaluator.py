@@ -1,13 +1,11 @@
-"""Parallel evaluator for ALFWorld with checkpoint support."""
+"""Sequential evaluator for ALFWorld with checkpoint support."""
 
 import hashlib
 import json
 import logging
 import random
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from threading import Lock
-from typing import List, Optional, Set
+from typing import List, Set
 
 from tqdm import tqdm
 
@@ -60,15 +58,14 @@ def generate_run_id(config: Config) -> str:
 
 
 class Evaluator:
-    """Parallel evaluator for ALFWorld tasks."""
+    """Sequential evaluator for ALFWorld tasks."""
 
     def __init__(self, config: Config):
         """Initialize evaluator."""
         self.config = config
         self.llm_client = LLMClient(config.llm, config.retry)
 
-        # Thread-safe state
-        self._lock = Lock()
+        # State
         self._completed_game_ids: Set[str] = set()
         self._results: List[GameResult] = []
         self._success_count = 0
@@ -79,8 +76,7 @@ class Evaluator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.run_id = generate_run_id(config)
-        self.checkpoint_path = self.output_dir / \
-            f"{self.run_id}_checkpoint.json"
+        self.checkpoint_path = self.output_dir / f"{self.run_id}_checkpoint.json"
         self.results_path = self.output_dir / f"{self.run_id}_results.json"
         self.debug_log_path = self.output_dir / f"{self.run_id}_debug.log"
 
@@ -112,31 +108,23 @@ class Evaluator:
                 self._success_steps += result.steps
 
         if self._completed_game_ids:
-            print(
-                f"{Colors.info('Checkpoint found:')} {len(self._completed_game_ids)} games completed")
+            print(f"{Colors.info('Checkpoint found:')} {len(self._completed_game_ids)} games completed")
 
     def _save_checkpoint(self) -> None:
         """Save current checkpoint."""
-        with self._lock:
-            save_checkpoint(
-                str(self.checkpoint_path),
-                self._completed_game_ids,
-                [game_result_to_dict(r) for r in self._results],
-            )
+        save_checkpoint(
+            str(self.checkpoint_path),
+            self._completed_game_ids,
+            [game_result_to_dict(r) for r in self._results],
+        )
 
     def _add_result(self, result: GameResult) -> None:
-        """Add a result thread-safely."""
-        with self._lock:
-            self._results.append(result)
-            self._completed_game_ids.add(result.game_id)
-            if result.success:
-                self._success_count += 1
-                self._success_steps += result.steps
-
-    def _get_progress(self) -> tuple:
-        """Get current progress thread-safely."""
-        with self._lock:
-            return len(self._results), self._success_count, self._success_steps
+        """Add a result."""
+        self._results.append(result)
+        self._completed_game_ids.add(result.game_id)
+        if result.success:
+            self._success_count += 1
+            self._success_steps += result.steps
 
     def get_game_files(self) -> List[str]:
         """Get list of game files based on configuration."""
@@ -154,14 +142,8 @@ class Evaluator:
 
         return game_files
 
-    def _run_game_wrapper(self, game_file: str) -> Optional[GameResult]:
-        """Wrapper for running a single game."""
-        game_id = get_game_id_from_path(game_file)
-
-        with self._lock:
-            if game_id in self._completed_game_ids:
-                return None
-
+    def _run_game(self, game_file: str) -> GameResult:
+        """Run a single game."""
         return run_single_game(
             alfworld_data_path=self.config.data.alfworld_data_path,
             game_file=game_file,
@@ -181,23 +163,20 @@ class Evaluator:
         print(Colors.highlight("=" * 60))
         print(f"  Model:    {Colors.info(self.config.llm.model)}")
         print(f"  Split:    {Colors.info(self.config.test.split)}")
-        print(
-            f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
-        print(
-            f"  Workers:  {Colors.info(str(self.config.runtime.parallel_workers))}")
+        print(f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
         print(f"  Run ID:   {Colors.dim(self.run_id)}")
         print(Colors.highlight("=" * 60))
         print()
 
         if self.config.runtime.debug:
-            log_system_prompt(get_system_prompt(
-                self.config.prompt.use_few_shot))
+            log_system_prompt(get_system_prompt(self.config.prompt.use_few_shot))
 
         self._load_checkpoint()
 
         game_files = self.get_game_files()
         total_games = len(game_files)
 
+        # Filter out already completed games
         remaining_files = [
             f for f in game_files
             if get_game_id_from_path(f) not in self._completed_game_ids
@@ -213,53 +192,52 @@ class Evaluator:
                     f"{Colors.warning(str(len(remaining_files)))} remaining"
                 )
             else:
-                print(
-                    f"Remaining: {Colors.warning(str(len(remaining_files)))}")
+                print(f"Remaining: {Colors.warning(str(len(remaining_files)))}")
             print()
 
             completed_since_save = 0
 
-            with ThreadPoolExecutor(max_workers=self.config.runtime.parallel_workers) as executor:
-                futures = {executor.submit(
-                    self._run_game_wrapper, f): f for f in remaining_files}
+            # Sequential evaluation with progress bar
+            with tqdm(
+                remaining_files,
+                desc="Evaluating",
+                unit="game",
+                ncols=100,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+            ) as pbar:
+                for game_file in pbar:
+                    game_id = get_game_id_from_path(game_file)
 
-                with tqdm(
-                    total=len(remaining_files),
-                    desc="Evaluating",
-                    unit="game",
-                    ncols=100,
-                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
-                ) as pbar:
-                    for future in as_completed(futures):
-                        try:
-                            result = future.result()
+                    # Skip if already completed
+                    if game_id in self._completed_game_ids:
+                        continue
 
-                            if result is not None:
-                                self._add_result(result)
-                                completed_since_save += 1
+                    try:
+                        result = self._run_game(game_file)
+                        self._add_result(result)
+                        completed_since_save += 1
 
-                                completed, successes, success_steps = self._get_progress()
-                                progress_str = format_progress(
-                                    completed, total_games, successes, success_steps)
-                                result_str = format_game_result(result)
+                        # Log progress
+                        completed = len(self._results)
+                        progress_str = format_progress(
+                            completed, total_games, self._success_count, self._success_steps
+                        )
+                        result_str = format_game_result(result)
+                        tqdm.write(f"{progress_str} | {result_str}")
 
-                                tqdm.write(f"{progress_str} | {result_str}")
+                        # Save checkpoint periodically
+                        if completed_since_save >= self.config.runtime.save_interval:
+                            self._save_checkpoint()
+                            completed_since_save = 0
 
-                                if completed_since_save >= self.config.runtime.save_interval:
-                                    self._save_checkpoint()
-                                    completed_since_save = 0
-
-                        except Exception as e:
-                            logger.error(f"Error processing game: {e}")
-
-                        pbar.update(1)
+                    except Exception as e:
+                        logger.error(f"Error processing {game_file}: {e}")
 
         # Final save
         self._save_checkpoint()
 
         timestamp = get_timestamp().replace(":", "-")
-        final_results_path = self.output_dir / \
-            f"{self.run_id}_{timestamp}_results.json"
+        final_results_path = self.output_dir / f"{self.run_id}_{timestamp}_results.json"
 
         save_results(
             results=self._results,
@@ -276,6 +254,10 @@ class Evaluator:
         )
 
         # Print summary
+        self._print_summary(final_results_path)
+
+    def _print_summary(self, final_results_path: Path) -> None:
+        """Print evaluation summary."""
         summary = compute_summary(self._results)
 
         print()
@@ -290,10 +272,8 @@ class Evaluator:
             else Colors.BRIGHT_RED
         )
         print(f"  Total games:     {summary['total_games']}")
-        print(
-            f"  Successes:       {Colors.success(str(summary['successes']))}")
-        print(
-            f"  Success rate:    {rate_color}{summary['success_rate']:.2%}{Colors.RESET}")
+        print(f"  Successes:       {Colors.success(str(summary['successes']))}")
+        print(f"  Success rate:    {rate_color}{summary['success_rate']:.2%}{Colors.RESET}")
         print(f"  Avg steps:       {summary['avg_steps']:.1f}")
         print(f"  Success avg:     {summary['success_avg_steps']:.1f}")
 
