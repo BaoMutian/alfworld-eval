@@ -7,7 +7,31 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from termcolor import colored
+
 from .agent import GameResult
+
+
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with colored output."""
+    
+    COLORS = {
+        'DEBUG': 'cyan',
+        'INFO': None,
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'red',
+    }
+    
+    def format(self, record):
+        # Format the message
+        message = super().format(record)
+        
+        # Apply color based on level
+        color = self.COLORS.get(record.levelname)
+        if color:
+            return colored(message, color)
+        return message
 
 
 def setup_logging(debug: bool = False, log_file: Optional[str] = None) -> None:
@@ -19,12 +43,6 @@ def setup_logging(debug: bool = False, log_file: Optional[str] = None) -> None:
     """
     level = logging.DEBUG if debug else logging.INFO
     
-    # Create formatter
-    formatter = logging.Formatter(
-        "[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    
     # Setup root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
@@ -32,38 +50,40 @@ def setup_logging(debug: bool = False, log_file: Optional[str] = None) -> None:
     # Clear existing handlers
     root_logger.handlers.clear()
     
-    # Console handler
+    # Console handler with colors
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
-    console_handler.setFormatter(formatter)
+    console_formatter = ColoredFormatter(
+        "[%(asctime)s] %(message)s",
+        datefmt="%H:%M:%S"
+    )
+    console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
     
-    # File handler (if specified)
+    # File handler (if specified) - no colors
     if log_file:
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(level)
-        file_handler.setFormatter(formatter)
+        file_formatter = logging.Formatter(
+            "[%(asctime)s] [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
+    
+    # Suppress noisy loggers
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def get_timestamp() -> str:
-    """Get current timestamp string.
-    
-    Returns:
-        ISO format timestamp string.
-    """
+    """Get current timestamp string."""
     return datetime.now().isoformat(timespec="seconds")
 
 
 def game_result_to_dict(result: GameResult) -> Dict[str, Any]:
-    """Convert GameResult to dictionary.
-    
-    Args:
-        result: GameResult object.
-        
-    Returns:
-        Dictionary representation.
-    """
+    """Convert GameResult to dictionary."""
     return {
         "game_id": result.game_id,
         "game_file": result.game_file,
@@ -71,6 +91,7 @@ def game_result_to_dict(result: GameResult) -> Dict[str, Any]:
         "task_type_id": result.task_type_id,
         "success": result.success,
         "steps": result.steps,
+        "goal": result.goal,
         "actions": result.actions,
         "observations": result.observations,
         "thoughts": result.thoughts,
@@ -79,14 +100,7 @@ def game_result_to_dict(result: GameResult) -> Dict[str, Any]:
 
 
 def compute_summary(results: List[GameResult]) -> Dict[str, Any]:
-    """Compute summary statistics from results.
-    
-    Args:
-        results: List of GameResult objects.
-        
-    Returns:
-        Summary statistics dictionary.
-    """
+    """Compute summary statistics from results."""
     if not results:
         return {
             "total_games": 0,
@@ -142,14 +156,7 @@ def save_results(
     output_path: str,
     model_name: str,
 ) -> None:
-    """Save evaluation results to JSON file.
-    
-    Args:
-        results: List of GameResult objects.
-        config_dict: Configuration dictionary.
-        output_path: Path to output file.
-        model_name: Model name for the results.
-    """
+    """Save evaluation results to JSON file."""
     summary = compute_summary(results)
     
     output = {
@@ -160,7 +167,6 @@ def save_results(
         "results": [game_result_to_dict(r) for r in results],
     }
     
-    # Ensure output directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, "w", encoding="utf-8") as f:
@@ -168,23 +174,14 @@ def save_results(
 
 
 def load_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
-    """Load checkpoint from file.
-    
-    Args:
-        checkpoint_path: Path to checkpoint file.
-        
-    Returns:
-        Checkpoint data dictionary.
-    """
+    """Load checkpoint from file."""
     if not Path(checkpoint_path).exists():
         return {"completed_game_ids": set(), "results": []}
     
     with open(checkpoint_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     
-    # Convert game IDs list to set for faster lookup
     data["completed_game_ids"] = set(data.get("completed_game_ids", []))
-    
     return data
 
 
@@ -193,37 +190,20 @@ def save_checkpoint(
     completed_game_ids: set,
     results: List[Dict[str, Any]],
 ) -> None:
-    """Save checkpoint to file.
-    
-    Args:
-        checkpoint_path: Path to checkpoint file.
-        completed_game_ids: Set of completed game IDs.
-        results: List of result dictionaries.
-    """
+    """Save checkpoint to file."""
     data = {
         "completed_game_ids": list(completed_game_ids),
         "results": results,
         "timestamp": get_timestamp(),
     }
     
-    # Ensure directory exists
     Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
     
     with open(checkpoint_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def format_progress(current: int, total: int, successes: int) -> str:
-    """Format progress string.
-    
-    Args:
-        current: Current task number.
-        total: Total number of tasks.
-        successes: Number of successes so far.
-        
-    Returns:
-        Formatted progress string.
-    """
+def format_progress(current: int, total: int, successes: int, success_avg_steps: float) -> str:
+    """Format progress string with statistics."""
     success_rate = successes / current * 100 if current > 0 else 0
-    return f"[{current}/{total}] Success: {successes}/{current} ({success_rate:.1f}%)"
-
+    return f"[{current}/{total}] SR: {success_rate:.1f}% | SuccAvgSteps: {success_avg_steps:.1f}"

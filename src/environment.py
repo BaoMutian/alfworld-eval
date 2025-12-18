@@ -26,10 +26,10 @@ TASK_TYPE_TO_ID = {v: k for k, v in TASK_TYPES.items()}
 
 def get_task_type_from_path(game_path: str) -> Tuple[int, str]:
     """Extract task type from game path.
-    
+
     Args:
         game_path: Path to game file.
-        
+
     Returns:
         Tuple of (task_type_id, task_type_name).
     """
@@ -37,20 +37,20 @@ def get_task_type_from_path(game_path: str) -> Tuple[int, str]:
     for task_id, task_name in TASK_TYPES.items():
         if task_name in path_str:
             return task_id, task_name
-    
+
     # Handle additional task type (pick_and_place_with_movable_recep)
     if "pick_and_place_with_movable_recep" in path_str:
         return 1, "pick_and_place_with_movable_recep"
-    
+
     return 0, "unknown"
 
 
 def get_game_id_from_path(game_path: str) -> str:
     """Extract game ID from game path.
-    
+
     Args:
         game_path: Path to game file.
-        
+
     Returns:
         Game ID string.
     """
@@ -85,7 +85,7 @@ class AlfWorldEnv:
 
     def __init__(self, alfworld_data_path: str):
         """Initialize ALFWorld environment.
-        
+
         Args:
             alfworld_data_path: Path to ALFWorld data directory.
         """
@@ -97,48 +97,50 @@ class AlfWorldEnv:
         self.current_task_type = None
         self.current_task_type_id = None
         self.admissible_commands = []
-        
+
         # Load game logic files
         self.domain_path = self.alfworld_data_path / "logic" / "alfred.pddl"
         self.grammar_path = self.alfworld_data_path / "logic" / "alfred.twl2"
-        
+
         if not self.domain_path.exists():
-            raise FileNotFoundError(f"Domain file not found: {self.domain_path}")
+            raise FileNotFoundError(
+                f"Domain file not found: {self.domain_path}")
         if not self.grammar_path.exists():
-            raise FileNotFoundError(f"Grammar file not found: {self.grammar_path}")
-        
+            raise FileNotFoundError(
+                f"Grammar file not found: {self.grammar_path}")
+
         # Set environment variable
         os.environ["ALFWORLD_DATA"] = str(self.alfworld_data_path)
 
     def get_game_files(self, split: str, task_types: Optional[List[int]] = None) -> List[str]:
         """Get list of game files for a split.
-        
+
         Args:
             split: Dataset split (valid_seen, valid_train, valid_unseen, train).
             task_types: Optional list of task type IDs to filter.
-            
+
         Returns:
             List of game file paths.
         """
         split_path = self.alfworld_data_path / "json_2.1.1" / split
         if not split_path.exists():
             raise ValueError(f"Split path does not exist: {split_path}")
-        
+
         game_files = []
         for task_dir in split_path.iterdir():
             if not task_dir.is_dir():
                 continue
-            
+
             # Skip movable receptacle tasks (not supported)
             if "movable_recep" in task_dir.name or "Sliced" in task_dir.name:
                 continue
-            
+
             # Check task type filter
             if task_types is not None:
                 task_type_id, _ = get_task_type_from_path(str(task_dir))
                 if task_type_id not in task_types:
                     continue
-            
+
             # Find game files in trial directories
             for trial_dir in task_dir.iterdir():
                 if trial_dir.is_dir() and trial_dir.name.startswith("trial_"):
@@ -153,25 +155,26 @@ class AlfWorldEnv:
                         except (json.JSONDecodeError, KeyError):
                             # If we can't verify, include it anyway
                             game_files.append(str(game_file))
-        
+
         return sorted(game_files)
 
     def reset(self, game_path: str) -> Tuple[str, Dict[str, Any]]:
         """Reset environment with a specific game.
-        
+
         Args:
             game_path: Path to game.tw-pddl file.
-            
+
         Returns:
             Tuple of (initial_observation, info_dict).
         """
         # Close previous environment if exists
         self.close()
-        
+
         self.current_game_path = game_path
         self.current_game_id = get_game_id_from_path(game_path)
-        self.current_task_type_id, self.current_task_type = get_task_type_from_path(game_path)
-        
+        self.current_task_type_id, self.current_task_type = get_task_type_from_path(
+            game_path)
+
         # Register the game with textworld
         request_infos = textworld.EnvInfos(
             won=True,
@@ -179,23 +182,23 @@ class AlfWorldEnv:
             score=True,
             max_score=True,
         )
-        
+
         self.env_id = textworld.gym.register_game(
             game_path,
             request_infos,
             max_episode_steps=1000,
             wrappers=[AlfredDemangler()],
         )
-        
+
         # Create environment
         self.env = textworld.gym.make(self.env_id)
-        
+
         # Reset and get initial observation
         obs, infos = self.env.reset()
-        
+
         # Store admissible commands
         self.admissible_commands = infos.get("admissible_commands", [])
-        
+
         return obs, {
             "admissible_commands": self.admissible_commands,
             "won": False,
@@ -206,30 +209,31 @@ class AlfWorldEnv:
 
     def step(self, action: str) -> Tuple[str, float, bool, Dict[str, Any]]:
         """Execute action in environment.
-        
+
         Args:
             action: Action string to execute.
-            
+
         Returns:
             Tuple of (observation, reward, done, info).
         """
         # Handle special "check valid actions" command
         if action.lower().strip() == self.CHECK_VALID_ACTIONS:
-            valid_actions_str = "Valid actions:\n" + "\n".join(f"  - {cmd}" for cmd in self.admissible_commands)
+            valid_actions_str = "Valid actions:\n" + \
+                "\n".join(f"  - {cmd}" for cmd in self.admissible_commands)
             return valid_actions_str, 0, False, {
                 "admissible_commands": self.admissible_commands,
                 "won": False,
             }
-        
+
         # Execute action in environment
         obs, score, done, infos = self.env.step(action)
-        
+
         # Update admissible commands
         self.admissible_commands = infos.get("admissible_commands", [])
-        
+
         # Check if won
         won = infos.get("won", False)
-        
+
         return obs, score, done, {
             "admissible_commands": self.admissible_commands,
             "won": won,
@@ -248,14 +252,14 @@ class AlfWorldEnv:
 
 def create_env_for_game(alfworld_data_path: str, game_path: str) -> Tuple[AlfWorldEnv, str, Dict]:
     """Create and reset environment for a specific game.
-    
+
     This is a helper function for parallel execution where each worker
     needs its own environment instance.
-    
+
     Args:
         alfworld_data_path: Path to ALFWorld data.
         game_path: Path to game file.
-        
+
     Returns:
         Tuple of (env, initial_observation, info).
     """

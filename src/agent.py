@@ -22,6 +22,7 @@ class GameResult:
     task_type_id: int
     success: bool
     steps: int
+    goal: str = ""
     actions: List[str] = field(default_factory=list)
     observations: List[str] = field(default_factory=list)
     thoughts: List[str] = field(default_factory=list)
@@ -146,6 +147,7 @@ class ReActAgent:
         
         # Extract task description
         task_description = extract_task_description(initial_obs)
+        result.goal = task_description
         
         # Get few-shot examples if enabled
         few_shot = None
