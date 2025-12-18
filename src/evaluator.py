@@ -93,10 +93,11 @@ class Evaluator:
         # Generate stable run ID based on configuration (enables checkpoint resume)
         self.run_id = generate_run_id(config)
 
-        self.checkpoint_path = self.output_dir / f"{self.run_id}_checkpoint.json"
+        self.checkpoint_path = self.output_dir / \
+            f"{self.run_id}_checkpoint.json"
         self.results_path = self.output_dir / f"{self.run_id}_results.json"
         self.debug_log_path = self.output_dir / f"{self.run_id}_debug.log"
-        
+
         # Setup debug logging with run_id-specific log file
         if config.runtime.debug:
             setup_logging(debug=True, log_file=str(self.debug_log_path))

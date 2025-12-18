@@ -22,20 +22,20 @@ class LLMClient:
 
     def __init__(self, llm_config: LLMConfig, retry_config: RetryConfig):
         """Initialize LLM client.
-        
+
         Args:
             llm_config: LLM service configuration.
             retry_config: Retry configuration.
         """
         self.config = llm_config
         self.retry_config = retry_config
-        
+
         self.client = OpenAI(
             api_key=llm_config.api_key,
             base_url=llm_config.api_base_url,
             timeout=llm_config.timeout,
         )
-        
+
         # Create retry decorator with config
         self._chat_with_retry = self._create_retry_wrapper()
 
@@ -59,18 +59,18 @@ class LLMClient:
                 max_tokens=self.config.max_tokens,
             )
             return response.choices[0].message.content
-        
+
         return _chat
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
         """Send chat completion request with retry.
-        
+
         Args:
             messages: List of message dicts with 'role' and 'content'.
-            
+
         Returns:
             Model response content.
-            
+
         Raises:
             Exception: If all retries fail.
         """
@@ -78,16 +78,17 @@ class LLMClient:
             response = self._chat_with_retry(messages)
             return response
         except Exception as e:
-            logger.error(f"LLM request failed after {self.retry_config.max_retries} retries: {e}")
+            logger.error(
+                f"LLM request failed after {self.retry_config.max_retries} retries: {e}")
             raise
 
     def chat_simple(self, system_prompt: str, user_prompt: str) -> str:
         """Simple chat interface with system and user prompts.
-        
+
         Args:
             system_prompt: System prompt content.
             user_prompt: User prompt content.
-            
+
         Returns:
             Model response content.
         """

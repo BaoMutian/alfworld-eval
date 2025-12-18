@@ -9,7 +9,7 @@ from .llm_client import LLMClient
 from .environment import AlfWorldEnv
 from .prompts import SYSTEM_PROMPT, build_user_prompt, get_few_shot_examples
 from .prompts.system import extract_task_description
-from .utils import (
+from .logging_utils import (
     Colors,
     log_game_start,
     log_game_end,
