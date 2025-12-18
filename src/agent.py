@@ -22,7 +22,7 @@ class GameResult:
     task_type_id: int
     success: bool
     steps: int
-    goal: str = ""
+    goal: str = ""  # Task goal description
     actions: List[str] = field(default_factory=list)
     observations: List[str] = field(default_factory=list)
     thoughts: List[str] = field(default_factory=list)
@@ -135,6 +135,9 @@ class ReActAgent:
         Returns:
             GameResult with trajectory and outcome.
         """
+        # Extract task description
+        task_description = extract_task_description(initial_obs)
+        
         # Initialize result
         result = GameResult(
             game_id=info["game_id"],
@@ -143,11 +146,8 @@ class ReActAgent:
             task_type_id=info["task_type_id"],
             success=False,
             steps=0,
+            goal=task_description,  # Save the goal
         )
-        
-        # Extract task description
-        task_description = extract_task_description(initial_obs)
-        result.goal = task_description
         
         # Get few-shot examples if enabled
         few_shot = None
@@ -280,9 +280,9 @@ def run_single_game(
             task_type_id=task_type_id,
             success=False,
             steps=0,
+            goal="",
             error=str(e),
         )
     finally:
         if env is not None:
             env.close()
-

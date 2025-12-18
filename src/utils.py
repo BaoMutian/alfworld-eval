@@ -7,31 +7,85 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-from termcolor import colored
-
 from .agent import GameResult
 
 
-class ColoredFormatter(logging.Formatter):
-    """Custom formatter with colored output."""
+# ANSI color codes
+class Colors:
+    """ANSI color codes for terminal output."""
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
     
-    COLORS = {
-        'DEBUG': 'cyan',
-        'INFO': None,
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'CRITICAL': 'red',
+    # Regular colors
+    BLACK = "\033[30m"
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+    
+    # Bright colors
+    BRIGHT_RED = "\033[91m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"
+    BRIGHT_BLUE = "\033[94m"
+    BRIGHT_MAGENTA = "\033[95m"
+    BRIGHT_CYAN = "\033[96m"
+    
+    @classmethod
+    def success(cls, text: str) -> str:
+        return f"{cls.BRIGHT_GREEN}{text}{cls.RESET}"
+    
+    @classmethod
+    def error(cls, text: str) -> str:
+        return f"{cls.BRIGHT_RED}{text}{cls.RESET}"
+    
+    @classmethod
+    def warning(cls, text: str) -> str:
+        return f"{cls.BRIGHT_YELLOW}{text}{cls.RESET}"
+    
+    @classmethod
+    def info(cls, text: str) -> str:
+        return f"{cls.BRIGHT_CYAN}{text}{cls.RESET}"
+    
+    @classmethod
+    def highlight(cls, text: str) -> str:
+        return f"{cls.BOLD}{cls.WHITE}{text}{cls.RESET}"
+    
+    @classmethod
+    def dim(cls, text: str) -> str:
+        return f"{cls.WHITE}{text}{cls.RESET}"
+
+
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with colors for different log levels."""
+    
+    LEVEL_COLORS = {
+        logging.DEBUG: Colors.WHITE,
+        logging.INFO: Colors.RESET,
+        logging.WARNING: Colors.BRIGHT_YELLOW,
+        logging.ERROR: Colors.BRIGHT_RED,
+        logging.CRITICAL: Colors.BOLD + Colors.BRIGHT_RED,
     }
     
     def format(self, record):
-        # Format the message
-        message = super().format(record)
+        # Add color based on level
+        color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
         
-        # Apply color based on level
-        color = self.COLORS.get(record.levelname)
-        if color:
-            return colored(message, color)
-        return message
+        # Format timestamp
+        timestamp = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
+        
+        # Build message
+        if record.levelno >= logging.ERROR:
+            prefix = f"{Colors.BRIGHT_RED}[{timestamp}] ERROR:{Colors.RESET}"
+        elif record.levelno >= logging.WARNING:
+            prefix = f"{Colors.BRIGHT_YELLOW}[{timestamp}] WARN:{Colors.RESET}"
+        else:
+            prefix = f"{Colors.dim(f'[{timestamp}]')}"
+        
+        return f"{prefix} {color}{record.getMessage()}{Colors.RESET}"
 
 
 def setup_logging(debug: bool = False, log_file: Optional[str] = None) -> None:
@@ -53,45 +107,53 @@ def setup_logging(debug: bool = False, log_file: Optional[str] = None) -> None:
     # Console handler with colors
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
-    console_formatter = ColoredFormatter(
-        "[%(asctime)s] %(message)s",
-        datefmt="%H:%M:%S"
-    )
-    console_handler.setFormatter(console_formatter)
+    console_handler.setFormatter(ColoredFormatter())
     root_logger.addHandler(console_handler)
     
-    # File handler (if specified) - no colors
+    # File handler (if specified) - without colors
     if log_file:
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setLevel(level)
         file_formatter = logging.Formatter(
-            "[%(asctime)s] [%(levelname)s] %(message)s",
+            "[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(level)
         file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
     
     # Suppress noisy loggers
-    logging.getLogger("openai").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def get_timestamp() -> str:
-    """Get current timestamp string."""
+    """Get current timestamp string.
+    
+    Returns:
+        ISO format timestamp string.
+    """
     return datetime.now().isoformat(timespec="seconds")
 
 
 def game_result_to_dict(result: GameResult) -> Dict[str, Any]:
-    """Convert GameResult to dictionary."""
+    """Convert GameResult to dictionary.
+    
+    Args:
+        result: GameResult object.
+        
+    Returns:
+        Dictionary representation.
+    """
     return {
         "game_id": result.game_id,
         "game_file": result.game_file,
         "task_type": result.task_type,
         "task_type_id": result.task_type_id,
+        "goal": result.goal,  # Include goal before actions
         "success": result.success,
         "steps": result.steps,
-        "goal": result.goal,
         "actions": result.actions,
         "observations": result.observations,
         "thoughts": result.thoughts,
@@ -100,7 +162,14 @@ def game_result_to_dict(result: GameResult) -> Dict[str, Any]:
 
 
 def compute_summary(results: List[GameResult]) -> Dict[str, Any]:
-    """Compute summary statistics from results."""
+    """Compute summary statistics from results.
+    
+    Args:
+        results: List of GameResult objects.
+        
+    Returns:
+        Summary statistics dictionary.
+    """
     if not results:
         return {
             "total_games": 0,
@@ -156,7 +225,14 @@ def save_results(
     output_path: str,
     model_name: str,
 ) -> None:
-    """Save evaluation results to JSON file."""
+    """Save evaluation results to JSON file.
+    
+    Args:
+        results: List of GameResult objects.
+        config_dict: Configuration dictionary.
+        output_path: Path to output file.
+        model_name: Model name for the results.
+    """
     summary = compute_summary(results)
     
     output = {
@@ -167,6 +243,7 @@ def save_results(
         "results": [game_result_to_dict(r) for r in results],
     }
     
+    # Ensure output directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, "w", encoding="utf-8") as f:
@@ -174,14 +251,23 @@ def save_results(
 
 
 def load_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
-    """Load checkpoint from file."""
+    """Load checkpoint from file.
+    
+    Args:
+        checkpoint_path: Path to checkpoint file.
+        
+    Returns:
+        Checkpoint data dictionary.
+    """
     if not Path(checkpoint_path).exists():
         return {"completed_game_ids": set(), "results": []}
     
     with open(checkpoint_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     
+    # Convert game IDs list to set for faster lookup
     data["completed_game_ids"] = set(data.get("completed_game_ids", []))
+    
     return data
 
 
@@ -190,20 +276,77 @@ def save_checkpoint(
     completed_game_ids: set,
     results: List[Dict[str, Any]],
 ) -> None:
-    """Save checkpoint to file."""
+    """Save checkpoint to file.
+    
+    Args:
+        checkpoint_path: Path to checkpoint file.
+        completed_game_ids: Set of completed game IDs.
+        results: List of result dictionaries.
+    """
     data = {
         "completed_game_ids": list(completed_game_ids),
         "results": results,
         "timestamp": get_timestamp(),
     }
     
+    # Ensure directory exists
     Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
     
     with open(checkpoint_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def format_progress(current: int, total: int, successes: int, success_avg_steps: float) -> str:
-    """Format progress string with statistics."""
+def format_progress(current: int, total: int, successes: int, success_steps: int = 0) -> str:
+    """Format progress string with colors.
+    
+    Args:
+        current: Current task number.
+        total: Total number of tasks.
+        successes: Number of successes so far.
+        success_steps: Total steps for successful games.
+        
+    Returns:
+        Formatted progress string with colors.
+    """
     success_rate = successes / current * 100 if current > 0 else 0
-    return f"[{current}/{total}] SR: {success_rate:.1f}% | SuccAvgSteps: {success_avg_steps:.1f}"
+    avg_success_steps = success_steps / successes if successes > 0 else 0
+    
+    # Color code the success rate
+    if success_rate >= 70:
+        rate_color = Colors.BRIGHT_GREEN
+    elif success_rate >= 50:
+        rate_color = Colors.BRIGHT_YELLOW
+    else:
+        rate_color = Colors.BRIGHT_RED
+    
+    progress = f"{Colors.BRIGHT_CYAN}[{current}/{total}]{Colors.RESET}"
+    rate = f"{rate_color}{success_rate:.1f}%{Colors.RESET}"
+    
+    if successes > 0:
+        steps_info = f"{Colors.dim(f'avg_steps={avg_success_steps:.1f}')}"
+        return f"{progress} SR: {rate} ({successes}/{current}) {steps_info}"
+    else:
+        return f"{progress} SR: {rate} ({successes}/{current})"
+
+
+def format_game_result(result: GameResult, game_num: int, total: int) -> str:
+    """Format a single game result for display.
+    
+    Args:
+        result: Game result.
+        game_num: Current game number.
+        total: Total games.
+        
+    Returns:
+        Formatted result string.
+    """
+    if result.success:
+        status = Colors.success("✓ SUCCESS")
+    elif result.error:
+        status = Colors.error(f"✗ ERROR: {result.error[:30]}...")
+    else:
+        status = Colors.warning("✗ FAILED")
+    
+    game_id_short = result.game_id.split("/")[0][:40]
+    
+    return f"{status} | {Colors.dim(game_id_short)} | {result.steps} steps"
