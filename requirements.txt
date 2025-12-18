@@ -1,0 +1,20 @@
+# ALFWorld Evaluation Framework Dependencies
+
+# ALFWorld environment (should be installed from source)
+# alfworld
+
+# LLM Client
+openai>=1.0.0
+
+# Configuration
+pyyaml>=6.0
+
+# Retry mechanism
+tenacity>=8.0.0
+
+# Progress bar
+tqdm>=4.65.0
+
+# Utilities
+python-dateutil>=2.8.0
+
