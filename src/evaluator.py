@@ -1,5 +1,7 @@
 """Parallel evaluator for ALFWorld with checkpoint support."""
 
+import hashlib
+import json
 import logging
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,6 +30,42 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
+def generate_run_id(config: Config) -> str:
+    """Generate a stable run ID based on configuration.
+    
+    This ensures that the same configuration always produces the same run ID,
+    enabling checkpoint resume functionality.
+    
+    Args:
+        config: Evaluation configuration.
+        
+    Returns:
+        Stable run ID string.
+    """
+    # Key parameters that define a unique evaluation run
+    key_params = {
+        "model": config.llm.model,
+        "split": config.test.split,
+        "task_types": sorted(config.test.task_types) if config.test.task_types else None,
+        "num_games": config.test.num_games,
+        "seed": config.test.seed,
+        "max_steps": config.test.max_steps,
+        "use_few_shot": config.prompt.use_few_shot,
+        "history_length": config.prompt.history_length,
+    }
+    
+    # Generate hash from key parameters
+    params_str = json.dumps(key_params, sort_keys=True)
+    params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
+    
+    # Create readable run ID
+    model_short = config.llm.model.split("/")[-1]
+    task_str = "all" if config.test.task_types is None else f"t{''.join(map(str, config.test.task_types))}"
+    num_str = "full" if config.test.num_games is None else f"n{config.test.num_games}"
+    
+    return f"{model_short}_{config.test.split}_{task_str}_{num_str}_{params_hash}"
+
+
 class Evaluator:
     """Parallel evaluator for ALFWorld tasks."""
 
@@ -51,12 +89,11 @@ class Evaluator:
         self.output_dir = Path(config.runtime.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate run ID for this evaluation
-        timestamp = get_timestamp().replace(":", "-")
-        model_short = config.llm.model.split("/")[-1]
-        self.run_id = f"{model_short}_{config.test.split}_{timestamp}"
-
+        # Generate stable run ID based on configuration (enables checkpoint resume)
+        self.run_id = generate_run_id(config)
+        
         self.checkpoint_path = self.output_dir / f"{self.run_id}_checkpoint.json"
+        # Results file will be generated with timestamp when complete
         self.results_path = self.output_dir / f"{self.run_id}_results.json"
 
     def _load_checkpoint(self) -> None:
@@ -85,8 +122,8 @@ class Evaluator:
                 self._success_steps += result.steps
 
         if self._completed_game_ids:
-            logger.info(
-                f"{Colors.info('Checkpoint loaded:')} {len(self._completed_game_ids)} completed games"
+            print(
+                f"{Colors.info('Checkpoint found:')} {len(self._completed_game_ids)} games already completed"
             )
 
     def _save_checkpoint(self) -> None:
@@ -132,7 +169,7 @@ class Evaluator:
             task_types=self.config.test.task_types,
         )
 
-        # Shuffle with seed
+        # Shuffle with seed (deterministic order for same seed)
         random.seed(self.config.test.seed)
         random.shuffle(game_files)
 
@@ -182,11 +219,11 @@ class Evaluator:
         print(f"  Split:    {Colors.info(self.config.test.split)}")
         print(f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
         print(f"  Workers:  {Colors.info(str(self.config.runtime.parallel_workers))}")
-        print(f"  Output:   {Colors.dim(str(self.results_path))}")
+        print(f"  Run ID:   {Colors.dim(self.run_id)}")
         print(Colors.highlight("=" * 60))
         print()
 
-        # Load checkpoint
+        # Load checkpoint (will resume if same config)
         self._load_checkpoint()
 
         # Get game files
@@ -205,8 +242,12 @@ class Evaluator:
         else:
             print(f"Total games: {Colors.info(str(total_games))}")
             if self._completed_game_ids:
-                print(f"Resumed from checkpoint: {Colors.info(str(len(self._completed_game_ids)))} completed")
-            print(f"Remaining: {Colors.warning(str(len(remaining_files)))}")
+                print(
+                    f"{Colors.success('Resuming:')} {len(self._completed_game_ids)} done, "
+                    f"{Colors.warning(str(len(remaining_files)))} remaining"
+                )
+            else:
+                print(f"Remaining: {Colors.warning(str(len(remaining_files)))}")
             print()
 
             # Run evaluation with parallel workers
@@ -247,7 +288,7 @@ class Evaluator:
                                 result_str = format_game_result(
                                     result, completed, total_games
                                 )
-                                
+
                                 # Update tqdm description with current stats
                                 tqdm.write(f"{progress_str} | {result_str}")
 
@@ -264,7 +305,17 @@ class Evaluator:
         # Final save
         self._save_checkpoint()
 
-        # Save final results
+        # Save final results (with timestamp for completed runs)
+        timestamp = get_timestamp().replace(":", "-")
+        final_results_path = self.output_dir / f"{self.run_id}_{timestamp}_results.json"
+        save_results(
+            results=self._results,
+            config_dict=self.config.to_dict(),
+            output_path=str(final_results_path),
+            model_name=self.config.llm.model,
+        )
+        
+        # Also save to the standard path (for easy access to latest results)
         save_results(
             results=self._results,
             config_dict=self.config.to_dict(),
@@ -280,7 +331,7 @@ class Evaluator:
         print(Colors.highlight("  EVALUATION COMPLETE"))
         print(Colors.highlight("=" * 60))
         print()
-        
+
         # Overall stats
         rate_color = (
             Colors.BRIGHT_GREEN if summary["success_rate"] >= 0.7
@@ -311,7 +362,8 @@ class Evaluator:
 
         print()
         print(Colors.highlight("=" * 60))
-        print(f"  Results saved to: {Colors.info(str(self.results_path))}")
+        print(f"  Results: {Colors.info(str(final_results_path))}")
+        print(f"  Checkpoint: {Colors.dim(str(self.checkpoint_path))}")
         print(Colors.highlight("=" * 60))
         print()
 

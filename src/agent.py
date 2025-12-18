@@ -40,7 +40,7 @@ class ReActAgent:
         debug: bool = False,
     ):
         """Initialize ReAct agent.
-        
+
         Args:
             llm_client: LLM client for generating responses.
             use_few_shot: Whether to include few-shot examples.
@@ -54,35 +54,35 @@ class ReActAgent:
 
     def parse_response(self, response: str) -> Tuple[str, str]:
         """Parse LLM response to extract thought and action.
-        
+
         Args:
             response: Raw LLM response.
-            
+
         Returns:
             Tuple of (thought, action).
         """
         thought = ""
         action = ""
-        
+
         # Try to extract Think section
         think_patterns = [
             r"Think:\s*(.+?)(?=Action:|$)",
             r"THINK:\s*(.+?)(?=ACTION:|$)",
             r"Thought:\s*(.+?)(?=Action:|$)",
         ]
-        
+
         for pattern in think_patterns:
             match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
             if match:
                 thought = match.group(1).strip()
                 break
-        
+
         # Try to extract Action section
         action_patterns = [
             r"Action:\s*(.+?)(?=Think:|Thought:|$)",
             r"ACTION:\s*(.+?)(?=THINK:|THOUGHT:|$)",
         ]
-        
+
         for pattern in action_patterns:
             match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
             if match:
@@ -90,7 +90,7 @@ class ReActAgent:
                 # Take only the first line of action (in case there's more text)
                 action = action.split("\n")[0].strip()
                 break
-        
+
         # If no structured format found, try to find any action-like text
         if not action:
             # Look for common action patterns
@@ -108,13 +108,13 @@ class ReActAgent:
                         break
                 if action:
                     break
-        
+
         # If still no action, use the last line as a fallback
         if not action:
             lines = [l.strip() for l in response.split("\n") if l.strip()]
             if lines:
                 action = lines[-1]
-        
+
         return thought, action
 
     def run_game(
@@ -125,19 +125,19 @@ class ReActAgent:
         max_steps: int = 30,
     ) -> GameResult:
         """Run a single game with the agent.
-        
+
         Args:
             env: Initialized ALFWorld environment.
             initial_obs: Initial observation from env.reset().
             info: Info dict from env.reset().
             max_steps: Maximum steps allowed.
-            
+
         Returns:
             GameResult with trajectory and outcome.
         """
         # Extract task description
         task_description = extract_task_description(initial_obs)
-        
+
         # Initialize result
         result = GameResult(
             game_id=info["game_id"],
@@ -148,22 +148,22 @@ class ReActAgent:
             steps=0,
             goal=task_description,  # Save the goal
         )
-        
+
         # Get few-shot examples if enabled
         few_shot = None
         if self.use_few_shot:
             few_shot = get_few_shot_examples(info["task_type_id"])
-        
+
         # Initialize history and current observation
         history: List[Tuple[str, str]] = []
         current_obs = initial_obs
         result.observations.append(current_obs)
-        
+
         if self.debug:
             logger.info(f"Starting game: {info['game_id']}")
             logger.info(f"Task: {task_description}")
             logger.info(f"Initial observation: {current_obs[:200]}...")
-        
+
         try:
             for step in range(max_steps):
                 # Build prompts
@@ -174,53 +174,54 @@ class ReActAgent:
                     history_length=self.history_length,
                     few_shot_examples=few_shot,
                 )
-                
+
                 # Get LLM response
                 response = self.llm_client.chat_simple(
                     system_prompt=SYSTEM_PROMPT,
                     user_prompt=user_prompt,
                     debug=self.debug,
                 )
-                
+
                 # Parse response
                 thought, action = self.parse_response(response)
-                
+
                 if self.debug:
                     logger.info(f"Step {step + 1}: Think: {thought[:100]}...")
                     logger.info(f"Step {step + 1}: Action: {action}")
-                
+
                 result.thoughts.append(thought)
                 result.actions.append(action)
-                
+
                 # Execute action
                 obs, reward, done, step_info = env.step(action)
                 result.observations.append(obs)
-                
+
                 if self.debug:
-                    logger.info(f"Step {step + 1}: Observation: {obs[:100]}...")
-                
+                    logger.info(
+                        f"Step {step + 1}: Observation: {obs[:100]}...")
+
                 # Update history
                 history.append((action, obs))
                 current_obs = obs
                 result.steps = step + 1
-                
+
                 # Check if won
                 if step_info.get("won", False):
                     result.success = True
                     if self.debug:
                         logger.info(f"Game won at step {step + 1}!")
                     break
-                
+
                 # Check if done (but not won)
                 if done and not step_info.get("won", False):
                     if self.debug:
                         logger.info(f"Game ended at step {step + 1} (not won)")
                     break
-                    
+
         except Exception as e:
             result.error = str(e)
             logger.error(f"Error during game {info['game_id']}: {e}")
-        
+
         return result
 
 
@@ -234,10 +235,10 @@ def run_single_game(
     debug: bool = False,
 ) -> GameResult:
     """Run a single game from scratch.
-    
+
     This function creates its own environment and agent, making it suitable
     for parallel execution where each worker needs independent instances.
-    
+
     Args:
         alfworld_data_path: Path to ALFWorld data.
         game_file: Path to game.tw-pddl file.
@@ -246,7 +247,7 @@ def run_single_game(
         history_length: History length for prompts.
         max_steps: Maximum steps per game.
         debug: Debug mode.
-        
+
     Returns:
         GameResult with trajectory and outcome.
     """
@@ -255,7 +256,7 @@ def run_single_game(
         # Create environment
         env = AlfWorldEnv(alfworld_data_path)
         obs, info = env.reset(game_file)
-        
+
         # Create agent
         agent = ReActAgent(
             llm_client=llm_client,
@@ -263,11 +264,11 @@ def run_single_game(
             history_length=history_length,
             debug=debug,
         )
-        
+
         # Run game
         result = agent.run_game(env, obs, info, max_steps=max_steps)
         return result
-        
+
     except Exception as e:
         logger.error(f"Error running game {game_file}: {e}")
         # Return error result
