@@ -9,40 +9,7 @@ Based on official ALFWorld command format:
 """
 
 # Static few-shot examples covering different task types
-# These are the same regardless of the current task type
-FEW_SHOT_EXAMPLES = """Example 1: Put a book on the sidetable
-
-> look
-You are in the middle of a room. Looking quickly around you, you see a bed 1, a desk 1, a drawer 1, a sidetable 1.
-
-Think: I need to find a book and put it on the sidetable. Let me check the bed first, books are often there.
-Action: go to bed 1
-
-> go to bed 1
-On the bed 1, you see a book 1, a pillow 1.
-
-Think: I found a book on the bed. Let me pick it up.
-Action: take book 1 from bed 1
-
-> take book 1 from bed 1
-You pick up the book 1 from the bed 1.
-
-Think: Now I have the book. I need to go to the sidetable and put it there.
-Action: go to sidetable 1
-
-> go to sidetable 1
-On the sidetable 1, you see a lamp 1.
-
-Think: I'm at the sidetable. Let me put the book here.
-Action: move book 1 to sidetable 1
-
-> move book 1 to sidetable 1
-You put the book 1 in/on the sidetable 1.
-Task completed!
-
----
-
-Example 2: Examine an alarm clock under a desk lamp
+FEW_SHOT_EXAMPLES = """Example 1: Examine an alarm clock under a desk lamp
 
 > look
 You are in the middle of a room. Looking quickly around you, you see a bed 1, a desk 1, a desklamp 1, a drawer 1.
@@ -69,7 +36,7 @@ Task completed!
 
 ---
 
-Example 3: Clean a mug and put it in the coffee machine
+Example 2: Clean a mug and put it in the coffee machine
 
 > look
 You are in the middle of a room. Looking quickly around you, you see a cabinet 1, a coffeemachine 1, a countertop 1, a fridge 1, a sinkbasin 1.
@@ -114,7 +81,7 @@ Task completed!
 
 ---
 
-Example 4: Heat an egg and put it in the fridge
+Example 3: Heat an egg and put it in the fridge
 
 > look
 You are in the middle of a room. Looking quickly around you, you see a countertop 1, a fridge 1, a microwave 1.
@@ -162,12 +129,3 @@ Action: move egg 1 to fridge 1
 > move egg 1 to fridge 1
 You put the egg 1 in/on the fridge 1.
 Task completed!"""
-
-
-def get_few_shot_examples() -> str:
-    """Get static few-shot examples.
-
-    Returns:
-        Few-shot examples string.
-    """
-    return FEW_SHOT_EXAMPLES

@@ -70,10 +70,10 @@ SYSTEM_PROMPT = _SYSTEM_PROMPT_BASE
 
 def get_system_prompt(use_few_shot: bool = True) -> str:
     """Get system prompt with or without few-shot examples.
-    
+
     Args:
         use_few_shot: Whether to include few-shot examples.
-        
+
     Returns:
         System prompt string.
     """
@@ -119,7 +119,8 @@ def build_user_prompt(
     parts.append("==================================================")
 
     # Limit history length
-    recent_history = history[-history_length:] if len(history) > history_length else history
+    recent_history = history[-history_length:] if len(
+        history) > history_length else history
 
     if recent_history:
         for action, observation in recent_history:
@@ -136,7 +137,8 @@ def build_user_prompt(
     parts.append("==================================================")
     parts.append("YOUR TURN")
     parts.append("==================================================")
-    parts.append("Based on the task goal and current observation, decide your next action.")
+    parts.append(
+        "Based on the task goal and current observation, decide your next action.")
     parts.append("Remember to use the exact format: Think: ... Action: ...")
 
     return "\n".join(parts)
