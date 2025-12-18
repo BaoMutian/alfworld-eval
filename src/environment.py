@@ -248,5 +248,3 @@ class AlfWorldEnv:
                 pass
             self.env = None
             self.env_id = None
-
-
