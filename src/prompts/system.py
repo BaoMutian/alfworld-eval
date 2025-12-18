@@ -1,8 +1,11 @@
 """System prompt and user prompt builder for ALFWorld evaluation."""
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional, TYPE_CHECKING
 
 from .few_shot import FEW_SHOT_EXAMPLES
+
+if TYPE_CHECKING:
+    from ..memory import RetrievedMemory
 
 # Base system prompt without few-shot examples
 _SYSTEM_PROMPT_BASE = """You are an intelligent agent operating in a household environment. Your goal is to complete tasks by interacting with objects and navigating through rooms.
@@ -77,6 +80,134 @@ def get_system_prompt(use_few_shot: bool = True) -> str:
     if use_few_shot:
         return SYSTEM_PROMPT_WITH_EXAMPLES
     return SYSTEM_PROMPT
+
+
+def _format_trajectory_for_memory(trajectory: List[dict]) -> str:
+    """Format trajectory for memory display.
+    
+    Args:
+        trajectory: List of action-observation pairs.
+        
+    Returns:
+        Formatted trajectory string (abbreviated).
+    """
+    if not trajectory:
+        return "(empty)"
+    
+    # Show abbreviated trajectory (first few and last few steps)
+    max_show = 6
+    lines = []
+    
+    if len(trajectory) <= max_show:
+        for step in trajectory:
+            action = step.get("action", "")
+            lines.append(f"  > {action}")
+    else:
+        # Show first 3 and last 3
+        for step in trajectory[:3]:
+            action = step.get("action", "")
+            lines.append(f"  > {action}")
+        lines.append(f"  ... ({len(trajectory) - 6} more steps) ...")
+        for step in trajectory[-3:]:
+            action = step.get("action", "")
+            lines.append(f"  > {action}")
+    
+    return "\n".join(lines)
+
+
+def _format_memory_items(memory_items: List) -> str:
+    """Format memory items for display.
+    
+    Args:
+        memory_items: List of MemoryEntry objects.
+        
+    Returns:
+        Formatted memory items string.
+    """
+    if not memory_items:
+        return ""
+    
+    lines = ["  Key Insights:"]
+    for item in memory_items:
+        lines.append(f"    - {item.title}: {item.description}")
+        if item.content:
+            # Truncate long content
+            content = item.content[:200] + "..." if len(item.content) > 200 else item.content
+            lines.append(f"      {content}")
+    
+    return "\n".join(lines)
+
+
+def build_memory_section(retrieved_memories: List["RetrievedMemory"]) -> str:
+    """Build the memory section for system prompt.
+    
+    Args:
+        retrieved_memories: List of RetrievedMemory objects.
+        
+    Returns:
+        Formatted memory section string.
+    """
+    if not retrieved_memories:
+        return ""
+    
+    parts = [
+        "",
+        "==================================================",
+        "RELEVANT EXPERIENCE FROM SIMILAR TASKS",
+        "==================================================",
+        "Below are experiences from past interactions that may help with your current task.",
+        "Use them as reference when relevant, but adapt to the specific situation.",
+        "",
+    ]
+    
+    for i, rm in enumerate(retrieved_memories, 1):
+        result_str = "SUCCESS" if rm.is_success else "FAILED"
+        parts.append(f"[Experience #{i}] (Similarity: {rm.similarity:.2f}, Result: {result_str})")
+        parts.append(f"  Goal: {rm.query}")
+        
+        # Add trajectory summary
+        parts.append(f"  Actions taken:")
+        parts.append(_format_trajectory_for_memory(rm.trajectory))
+        
+        # Add memory items (extracted insights)
+        if rm.memory_items:
+            parts.append(_format_memory_items(rm.memory_items))
+        
+        parts.append("")
+    
+    return "\n".join(parts)
+
+
+def get_system_prompt_with_memory(
+    use_few_shot: bool = True,
+    retrieved_memories: Optional[List["RetrievedMemory"]] = None,
+) -> str:
+    """Get system prompt with optional few-shot examples and retrieved memories.
+
+    Args:
+        use_few_shot: Whether to include few-shot examples.
+        retrieved_memories: Optional list of retrieved memories to include.
+
+    Returns:
+        System prompt string.
+    """
+    base_prompt = get_system_prompt(use_few_shot)
+    
+    if not retrieved_memories:
+        return base_prompt
+    
+    memory_section = build_memory_section(retrieved_memories)
+    
+    # Insert memory section before OUTPUT FORMAT section
+    # Find the position to insert
+    output_format_marker = "==================================================\nOUTPUT FORMAT"
+    
+    if output_format_marker in base_prompt:
+        idx = base_prompt.find(output_format_marker)
+        return base_prompt[:idx] + memory_section + "\n" + base_prompt[idx:]
+    else:
+        # Fallback: append at the end
+        return base_prompt + memory_section
 
 
 def build_user_prompt(

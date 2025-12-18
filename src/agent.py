@@ -3,11 +3,16 @@
 import re
 import logging
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, TYPE_CHECKING
 
 from .llm_client import LLMClient
 from .environment import AlfWorldEnv, get_game_id_from_path, get_task_type_from_path
-from .prompts import get_system_prompt, build_user_prompt, extract_task_description
+from .prompts import (
+    get_system_prompt,
+    get_system_prompt_with_memory,
+    build_user_prompt,
+    extract_task_description,
+)
 from .logging_utils import (
     Colors,
     log_game_start,
@@ -15,6 +20,9 @@ from .logging_utils import (
     log_step_interaction,
     format_step_info,
 )
+
+if TYPE_CHECKING:
+    from .memory import RetrievedMemory
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +41,8 @@ class GameResult:
     observations: List[str] = field(default_factory=list)
     thoughts: List[str] = field(default_factory=list)
     error: Optional[str] = None
+    # Memory-related fields
+    used_memories: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class ReActAgent:
@@ -51,12 +61,27 @@ class ReActAgent:
         use_few_shot: bool = True,
         history_length: int = 10,
         debug: bool = False,
+        retrieved_memories: Optional[List["RetrievedMemory"]] = None,
     ):
-        """Initialize ReAct agent."""
+        """Initialize ReAct agent.
+        
+        Args:
+            llm_client: LLM client for generating responses.
+            use_few_shot: Whether to include few-shot examples.
+            history_length: Number of history entries to include.
+            debug: Whether to enable debug logging.
+            retrieved_memories: Optional list of retrieved memories to use.
+        """
         self.llm_client = llm_client
         self.history_length = history_length
         self.debug = debug
-        self.system_prompt = get_system_prompt(use_few_shot)
+        self.retrieved_memories = retrieved_memories or []
+        
+        # Build system prompt with optional memories
+        self.system_prompt = get_system_prompt_with_memory(
+            use_few_shot=use_few_shot,
+            retrieved_memories=self.retrieved_memories,
+        )
 
     def parse_response(self, response: str) -> Tuple[str, str]:
         """Parse LLM response to extract thought and action."""
@@ -105,6 +130,9 @@ class ReActAgent:
         """Run a single game with the agent."""
         task_description = extract_task_description(initial_obs)
 
+        # Record used memories
+        used_memories = [rm.get_summary() for rm in self.retrieved_memories]
+
         result = GameResult(
             game_id=info["game_id"],
             game_file=env.current_game_path,
@@ -113,6 +141,7 @@ class ReActAgent:
             success=False,
             steps=0,
             goal=task_description,
+            used_memories=used_memories,
         )
 
         history: List[Tuple[str, str]] = []
@@ -123,6 +152,8 @@ class ReActAgent:
             log_game_start(info["game_id"], task_description)
             print(f"\n{Colors.info('Game:')} {info['game_id']}")
             print(f"{Colors.dim('Goal:')} {task_description}")
+            if self.retrieved_memories:
+                print(f"{Colors.dim('Using')} {Colors.info(str(len(self.retrieved_memories)))} {Colors.dim('retrieved memories')}")
 
         try:
             for step in range(max_steps):
@@ -183,8 +214,23 @@ def run_single_game(
     history_length: int = 10,
     max_steps: int = 30,
     debug: bool = False,
+    retrieved_memories: Optional[List["RetrievedMemory"]] = None,
 ) -> GameResult:
-    """Run a single game from scratch."""
+    """Run a single game from scratch.
+    
+    Args:
+        alfworld_data_path: Path to ALFWorld data directory.
+        game_file: Path to game file.
+        llm_client: LLM client for generating responses.
+        use_few_shot: Whether to include few-shot examples.
+        history_length: Number of history entries to include.
+        max_steps: Maximum steps per game.
+        debug: Whether to enable debug logging.
+        retrieved_memories: Optional list of retrieved memories to use.
+        
+    Returns:
+        GameResult with execution results.
+    """
     env = None
     try:
         env = AlfWorldEnv(alfworld_data_path)
@@ -195,6 +241,7 @@ def run_single_game(
             use_few_shot=use_few_shot,
             history_length=history_length,
             debug=debug,
+            retrieved_memories=retrieved_memories,
         )
 
         return agent.run_game(env, obs, info, max_steps=max_steps)

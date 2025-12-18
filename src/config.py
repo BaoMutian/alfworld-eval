@@ -59,6 +59,45 @@ class DataConfig:
 
 
 @dataclass
+class MaTTSConfig:
+    """MaTTS (Memory-aware Test-Time Scaling) configuration."""
+    enabled: bool = False
+    sample_n: int = 3
+    temperature: float = 0.7
+    max_tokens: int = 1024
+
+
+@dataclass
+class MemoryConfig:
+    """Memory system configuration."""
+    enabled: bool = False
+    mode: str = "baseline"  # baseline | retrieve_only | retrieve_and_extract
+    
+    # Storage configuration
+    memory_dir: str = "memory_banks"
+    task_name: str = "alfworld"
+    
+    # Embedding model configuration
+    embedding_model: str = "BAAI/bge-base-en-v1.5"
+    embedding_device: str = "cpu"
+    
+    # Retrieval parameters
+    top_k: int = 1
+    similarity_threshold: float = 0.5
+    
+    # MaTTS configuration
+    matts: MaTTSConfig = field(default_factory=MaTTSConfig)
+
+    def should_retrieve(self) -> bool:
+        """Check if retrieval is enabled."""
+        return self.enabled and self.mode in ("retrieve_only", "retrieve_and_extract")
+
+    def should_extract(self) -> bool:
+        """Check if extraction is enabled."""
+        return self.enabled and self.mode == "retrieve_and_extract"
+
+
+@dataclass
 class Config:
     """Main configuration class."""
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -67,6 +106,7 @@ class Config:
     prompt: PromptConfig = field(default_factory=PromptConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     data: DataConfig = field(default_factory=DataConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
 
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "Config":
@@ -95,6 +135,14 @@ class Config:
             config.runtime = RuntimeConfig(**runtime_data)
         if "data" in data:
             config.data = DataConfig(**data["data"])
+        if "memory" in data:
+            memory_data = data["memory"].copy()
+            # Handle nested matts config
+            if "matts" in memory_data:
+                memory_data["matts"] = MaTTSConfig(**memory_data["matts"])
+            else:
+                memory_data["matts"] = MaTTSConfig()
+            config.memory = MemoryConfig(**memory_data)
 
         return config
 
@@ -127,6 +175,18 @@ class Config:
 
         # Create output directory
         Path(self.runtime.output_dir).mkdir(parents=True, exist_ok=True)
+
+        # Validate memory configuration
+        valid_memory_modes = ["baseline", "retrieve_only", "retrieve_and_extract"]
+        if self.memory.mode not in valid_memory_modes:
+            raise ValueError(
+                f"Invalid memory mode: {self.memory.mode}. "
+                f"Must be one of {valid_memory_modes}"
+            )
+
+        # Create memory directory if memory is enabled
+        if self.memory.enabled:
+            Path(self.memory.memory_dir).mkdir(parents=True, exist_ok=True)
 
     def to_dict(self) -> dict:
         """Convert configuration to dictionary."""
@@ -161,6 +221,22 @@ class Config:
             },
             "data": {
                 "alfworld_data_path": self.data.alfworld_data_path,
+            },
+            "memory": {
+                "enabled": self.memory.enabled,
+                "mode": self.memory.mode,
+                "memory_dir": self.memory.memory_dir,
+                "task_name": self.memory.task_name,
+                "embedding_model": self.memory.embedding_model,
+                "embedding_device": self.memory.embedding_device,
+                "top_k": self.memory.top_k,
+                "similarity_threshold": self.memory.similarity_threshold,
+                "matts": {
+                    "enabled": self.memory.matts.enabled,
+                    "sample_n": self.memory.matts.sample_n,
+                    "temperature": self.memory.matts.temperature,
+                    "max_tokens": self.memory.matts.max_tokens,
+                },
             },
         }
 

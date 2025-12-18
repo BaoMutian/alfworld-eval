@@ -16,7 +16,7 @@ def get_timestamp() -> str:
 
 def game_result_to_dict(result: "GameResult") -> Dict[str, Any]:
     """Convert GameResult to dictionary."""
-    return {
+    data = {
         "game_id": result.game_id,
         "game_file": result.game_file,
         "task_type": result.task_type,
@@ -29,6 +29,12 @@ def game_result_to_dict(result: "GameResult") -> Dict[str, Any]:
         "thoughts": result.thoughts,
         "error": result.error,
     }
+    
+    # Add memory-related fields if present
+    if hasattr(result, 'used_memories') and result.used_memories:
+        data["used_memories"] = result.used_memories
+    
+    return data
 
 
 def compute_summary(results: List[Any]) -> Dict[str, Any]:

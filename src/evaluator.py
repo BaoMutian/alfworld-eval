@@ -1,11 +1,11 @@
-"""Sequential evaluator for ALFWorld with checkpoint support."""
+"""Sequential evaluator for ALFWorld with checkpoint support and memory integration."""
 
 import hashlib
 import json
 import logging
 import random
 from pathlib import Path
-from typing import List, Set
+from typing import List, Set, Optional
 
 from tqdm import tqdm
 
@@ -13,7 +13,7 @@ from .config import Config
 from .llm_client import LLMClient
 from .environment import AlfWorldEnv, get_game_id_from_path
 from .agent import GameResult, run_single_game
-from .prompts import get_system_prompt
+from .prompts import get_system_prompt, extract_task_description
 from .utils import (
     game_result_to_dict,
     compute_summary,
@@ -44,6 +44,9 @@ def generate_run_id(config: Config) -> str:
         "max_steps": config.test.max_steps,
         "use_few_shot": config.prompt.use_few_shot,
         "history_length": config.prompt.history_length,
+        # Include memory config in hash
+        "memory_enabled": config.memory.enabled,
+        "memory_mode": config.memory.mode,
     }
 
     params_hash = hashlib.md5(
@@ -53,12 +56,18 @@ def generate_run_id(config: Config) -> str:
     model_short = config.llm.model.split("/")[-1]
     task_str = "all" if not config.test.task_types else f"t{''.join(map(str, config.test.task_types))}"
     num_str = "full" if config.test.num_games is None else f"n{config.test.num_games}"
+    
+    # Add memory mode suffix if enabled
+    memory_suffix = ""
+    if config.memory.enabled:
+        mode_short = {"baseline": "base", "retrieve_only": "ret", "retrieve_and_extract": "retex"}
+        memory_suffix = f"_mem{mode_short.get(config.memory.mode, config.memory.mode[:3])}"
 
-    return f"{model_short}_{config.test.split}_{task_str}_{num_str}_{params_hash}"
+    return f"{model_short}_{config.test.split}_{task_str}_{num_str}{memory_suffix}_{params_hash}"
 
 
 class Evaluator:
-    """Sequential evaluator for ALFWorld tasks."""
+    """Sequential evaluator for ALFWorld tasks with optional memory support."""
 
     def __init__(self, config: Config):
         """Initialize evaluator."""
@@ -83,6 +92,67 @@ class Evaluator:
         if config.runtime.debug:
             setup_logging(debug=True, log_file=str(self.debug_log_path))
 
+        # Initialize memory components if enabled
+        self.memory_store = None
+        self.memory_retriever = None
+        self.memory_extractor = None
+        self._init_memory()
+
+    def _init_memory(self) -> None:
+        """Initialize memory components if enabled."""
+        if not self.config.memory.enabled:
+            return
+
+        try:
+            from .memory import (
+                EmbeddingModel,
+                MemoryStore,
+                MemoryRetriever,
+                MemoryExtractor,
+            )
+
+            # Initialize embedding model
+            embedding_model = EmbeddingModel(
+                model_name=self.config.memory.embedding_model,
+                device=self.config.memory.embedding_device,
+            )
+
+            # Initialize memory store
+            self.memory_store = MemoryStore(
+                memory_dir=self.config.memory.memory_dir,
+                task_name=self.config.memory.task_name,
+                embedding_model=embedding_model,
+            )
+
+            # Initialize retriever if needed
+            if self.config.memory.should_retrieve():
+                self.memory_retriever = MemoryRetriever(
+                    store=self.memory_store,
+                    embedding_model=embedding_model,
+                    top_k=self.config.memory.top_k,
+                    similarity_threshold=self.config.memory.similarity_threshold,
+                )
+
+            # Initialize extractor if needed
+            if self.config.memory.should_extract():
+                self.memory_extractor = MemoryExtractor(
+                    llm_client=self.llm_client,
+                    temperature=self.config.llm.temperature,
+                    max_tokens=self.config.llm.max_tokens,
+                )
+
+            logger.info(
+                f"Memory system initialized: mode={self.config.memory.mode}, "
+                f"store_size={self.memory_store.size()}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to initialize memory system: {e}")
+            logger.warning("Falling back to baseline mode (no memory)")
+            self.memory_store = None
+            self.memory_retriever = None
+            self.memory_extractor = None
+
     def _load_checkpoint(self) -> None:
         """Load checkpoint if exists."""
         checkpoint = load_checkpoint(str(self.checkpoint_path))
@@ -101,6 +171,7 @@ class Evaluator:
                 observations=r.get("observations", []),
                 thoughts=r.get("thoughts", []),
                 error=r.get("error"),
+                used_memories=r.get("used_memories", []),
             )
             self._results.append(result)
             if result.success:
@@ -142,9 +213,89 @@ class Evaluator:
 
         return game_files
 
+    def _retrieve_memories(self, game_file: str) -> list:
+        """Retrieve relevant memories for a game.
+        
+        Args:
+            game_file: Path to game file.
+            
+        Returns:
+            List of RetrievedMemory objects.
+        """
+        if not self.memory_retriever:
+            return []
+
+        try:
+            # Need to get the task goal from the game
+            # Create a temporary env to get initial observation
+            env = AlfWorldEnv(self.config.data.alfworld_data_path)
+            try:
+                obs, _ = env.reset(game_file)
+                goal = extract_task_description(obs)
+            finally:
+                env.close()
+
+            # Retrieve memories
+            retrieved = self.memory_retriever.retrieve(goal)
+            
+            if retrieved and self.config.runtime.debug:
+                logger.debug(
+                    f"Retrieved {len(retrieved)} memories for goal: {goal[:50]}..."
+                )
+
+            return retrieved
+
+        except Exception as e:
+            logger.error(f"Memory retrieval failed: {e}")
+            return []
+
+    def _extract_and_store_memory(self, result: GameResult) -> None:
+        """Extract memory from game result and store it.
+        
+        Args:
+            result: Game result to extract memory from.
+        """
+        if not self.memory_extractor or not self.memory_store:
+            return
+
+        try:
+            # Build trajectory from result
+            trajectory = []
+            for i, action in enumerate(result.actions):
+                obs = result.observations[i + 1] if i + 1 < len(result.observations) else ""
+                trajectory.append({
+                    "action": action,
+                    "observation": obs,
+                })
+
+            # Extract memory
+            memory = self.memory_extractor.extract(
+                task_id=result.game_id,
+                task_type=result.task_type,
+                goal=result.goal,
+                trajectory=trajectory,
+                is_success=result.success,
+            )
+
+            if memory:
+                self.memory_store.add(memory)
+                if self.config.runtime.debug:
+                    logger.debug(
+                        f"Extracted and stored memory {memory.memory_id} "
+                        f"({len(memory.memory_items)} items)"
+                    )
+
+        except Exception as e:
+            logger.error(f"Memory extraction failed for {result.game_id}: {e}")
+            # Don't propagate - extraction failure shouldn't stop evaluation
+
     def _run_game(self, game_file: str) -> GameResult:
-        """Run a single game."""
-        return run_single_game(
+        """Run a single game with optional memory support."""
+        # Retrieve relevant memories
+        retrieved_memories = self._retrieve_memories(game_file)
+
+        # Run game
+        result = run_single_game(
             alfworld_data_path=self.config.data.alfworld_data_path,
             game_file=game_file,
             llm_client=self.llm_client,
@@ -152,7 +303,14 @@ class Evaluator:
             history_length=self.config.prompt.history_length,
             max_steps=self.config.test.max_steps,
             debug=self.config.runtime.debug,
+            retrieved_memories=retrieved_memories,
         )
+
+        # Extract and store memory if enabled
+        if self.config.memory.should_extract():
+            self._extract_and_store_memory(result)
+
+        return result
 
     def run(self) -> None:
         """Run the evaluation."""
@@ -165,6 +323,17 @@ class Evaluator:
         print(f"  Split:    {Colors.info(self.config.test.split)}")
         print(f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
         print(f"  Run ID:   {Colors.dim(self.run_id)}")
+        
+        # Print memory info
+        if self.config.memory.enabled:
+            print(Colors.dim("-" * 40))
+            print(f"  Memory:   {Colors.info(self.config.memory.mode)}")
+            if self.memory_store:
+                stats = self.memory_store.get_stats()
+                print(f"  Bank:     {Colors.info(str(stats['total_memories']))} memories")
+            else:
+                print(f"  Bank:     {Colors.warning('Not initialized')}")
+        
         print(Colors.highlight("=" * 60))
         print()
 
@@ -293,10 +462,22 @@ class Evaluator:
                     f"({stats['success_rate']:.0%}){Colors.RESET}"
                 )
 
+        # Print memory statistics if enabled
+        if self.config.memory.enabled and self.memory_store:
+            print()
+            print(Colors.dim("-" * 40))
+            print("  Memory Statistics:")
+            stats = self.memory_store.get_stats()
+            print(f"    Total memories:   {stats['total_memories']}")
+            print(f"    Success memories: {stats['success_memories']}")
+            print(f"    Failure memories: {stats['failure_memories']}")
+
         print()
         print(Colors.highlight("=" * 60))
         print(f"  Results: {Colors.info(str(final_results_path))}")
         print(f"  Checkpoint: {Colors.dim(str(self.checkpoint_path))}")
+        if self.memory_store:
+            print(f"  Memory bank: {Colors.dim(str(self.memory_store.memories_path))}")
         print(Colors.highlight("=" * 60))
         print()
 

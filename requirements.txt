@@ -18,3 +18,8 @@ tqdm>=4.65.0
 # Utilities
 python-dateutil>=2.8.0
 
+# Memory System (ReasoningBank)
+sentence-transformers>=2.2.0
+numpy>=1.21.0
+json-repair>=0.25.0
+

@@ -37,3 +37,27 @@ runtime:
 # Data Configuration
 data:
   alfworld_data_path: "./alfworld_data"
+
+# Memory Configuration (ReasoningBank)
+memory:
+  enabled: false
+  mode: "baseline" # baseline | retrieve_only | retrieve_and_extract
+
+  # Storage configuration
+  memory_dir: "memory_banks"
+  task_name: "alfworld"
+
+  # Embedding model configuration
+  embedding_model: "BAAI/bge-base-en-v1.5"
+  embedding_device: "cpu"
+
+  # Retrieval parameters
+  top_k: 1
+  similarity_threshold: 0.5
+
+  # MaTTS configuration (Memory-aware Test-Time Scaling)
+  matts:
+    enabled: false
+    sample_n: 3
+    temperature: 0.7
+    max_tokens: 1024
