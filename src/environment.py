@@ -1,10 +1,13 @@
-"""ALFWorld environment wrapper."""
+"""ALFWorld environment wrapper using textworld.gym interface."""
 
 import os
-import re
+import json
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
+
+import textworld
+import textworld.gym
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +65,18 @@ def get_game_id_from_path(game_path: str) -> str:
     return Path(game_path).stem
 
 
+class AlfredDemangler(textworld.core.Wrapper):
+    """Wrapper to demangle Alfred object names."""
+
+    def load(self, *args, **kwargs):
+        super().load(*args, **kwargs)
+        # Import here to avoid circular imports
+        from alfworld.agents.utils.misc import Demangler
+        demangler = Demangler(game_infos=self._entity_infos, shuffle=False)
+        for info in self._entity_infos.values():
+            info.name = demangler.demangle_alfred_name(info.id)
+
+
 class AlfWorldEnv:
     """Wrapper for ALFWorld TextWorld environment."""
 
@@ -74,54 +89,26 @@ class AlfWorldEnv:
         Args:
             alfworld_data_path: Path to ALFWorld data directory.
         """
-        self.alfworld_data_path = Path(alfworld_data_path)
+        self.alfworld_data_path = Path(alfworld_data_path).absolute()
         self.env = None
+        self.env_id = None
         self.current_game_path = None
         self.current_game_id = None
         self.current_task_type = None
         self.current_task_type_id = None
         self.admissible_commands = []
-        self._setup_alfworld_env()
-
-    def _setup_alfworld_env(self):
-        """Setup ALFWorld environment variable."""
-        os.environ["ALFWORLD_DATA"] = str(self.alfworld_data_path.absolute())
-
-    def _load_environment(self, game_path: str):
-        """Load a specific game environment.
         
-        Args:
-            game_path: Path to game.tw-pddl file.
-        """
-        import alfworld.agents.environment as environment
+        # Load game logic files
+        self.domain_path = self.alfworld_data_path / "logic" / "alfred.pddl"
+        self.grammar_path = self.alfworld_data_path / "logic" / "alfred.twl2"
         
-        # Create environment config
-        config = {
-            "env": {
-                "type": "AlfredTWEnv",
-                "regen_game_files": False,
-                "domain_randomization": False,
-                "task_types": [1, 2, 3, 4, 5, 6],
-                "expert_timeout_steps": 150,
-                "expert_type": "handcoded",
-            },
-            "logic": {
-                "domain": str(self.alfworld_data_path / "logic" / "alfred.pddl"),
-                "grammar": str(self.alfworld_data_path / "logic" / "alfred.twl2"),
-            },
-            "general": {
-                "random_seed": 42,
-                "training": {
-                    "batch_size": 1,
-                    "max_episode": 50000,
-                },
-            },
-        }
+        if not self.domain_path.exists():
+            raise FileNotFoundError(f"Domain file not found: {self.domain_path}")
+        if not self.grammar_path.exists():
+            raise FileNotFoundError(f"Grammar file not found: {self.grammar_path}")
         
-        # Load single game
-        self.env = environment.AlfredTWEnv(config, train_eval="eval")
-        self.env.game_files = [game_path]
-        self.env.num_games = 1
+        # Set environment variable
+        os.environ["ALFWORLD_DATA"] = str(self.alfworld_data_path)
 
     def get_game_files(self, split: str, task_types: Optional[List[int]] = None) -> List[str]:
         """Get list of game files for a split.
@@ -142,6 +129,10 @@ class AlfWorldEnv:
             if not task_dir.is_dir():
                 continue
             
+            # Skip movable receptacle tasks (not supported)
+            if "movable_recep" in task_dir.name or "Sliced" in task_dir.name:
+                continue
+            
             # Check task type filter
             if task_types is not None:
                 task_type_id, _ = get_task_type_from_path(str(task_dir))
@@ -153,7 +144,15 @@ class AlfWorldEnv:
                 if trial_dir.is_dir() and trial_dir.name.startswith("trial_"):
                     game_file = trial_dir / "game.tw-pddl"
                     if game_file.exists():
-                        game_files.append(str(game_file))
+                        # Check if game is solvable
+                        try:
+                            with open(game_file, 'r') as f:
+                                gamedata = json.load(f)
+                            if gamedata.get('solvable', True):
+                                game_files.append(str(game_file))
+                        except (json.JSONDecodeError, KeyError):
+                            # If we can't verify, include it anyway
+                            game_files.append(str(game_file))
         
         return sorted(game_files)
 
@@ -166,19 +165,36 @@ class AlfWorldEnv:
         Returns:
             Tuple of (initial_observation, info_dict).
         """
-        self._load_environment(game_path)
+        # Close previous environment if exists
+        self.close()
+        
         self.current_game_path = game_path
         self.current_game_id = get_game_id_from_path(game_path)
         self.current_task_type_id, self.current_task_type = get_task_type_from_path(game_path)
         
-        obs, info = self.env.reset()
+        # Register the game with textworld
+        request_infos = textworld.EnvInfos(
+            won=True,
+            admissible_commands=True,
+            score=True,
+            max_score=True,
+        )
         
-        # Extract text observation
-        if isinstance(obs, list):
-            obs = obs[0]
+        self.env_id = textworld.gym.register_game(
+            game_path,
+            request_infos,
+            max_episode_steps=1000,
+            wrappers=[AlfredDemangler()],
+        )
+        
+        # Create environment
+        self.env = textworld.gym.make(self.env_id)
+        
+        # Reset and get initial observation
+        obs, infos = self.env.reset()
         
         # Store admissible commands
-        self.admissible_commands = info.get("admissible_commands", [[]])[0]
+        self.admissible_commands = infos.get("admissible_commands", [])
         
         return obs, {
             "admissible_commands": self.admissible_commands,
@@ -206,18 +222,13 @@ class AlfWorldEnv:
             }
         
         # Execute action in environment
-        obs, scores, dones, infos = self.env.step([action])
-        
-        # Extract values from batch
-        obs = obs[0] if isinstance(obs, list) else obs
-        done = dones[0] if isinstance(dones, list) else dones
-        score = scores[0] if isinstance(scores, list) else scores
+        obs, score, done, infos = self.env.step(action)
         
         # Update admissible commands
-        self.admissible_commands = infos.get("admissible_commands", [[]])[0]
+        self.admissible_commands = infos.get("admissible_commands", [])
         
         # Check if won
-        won = infos.get("won", [False])[0]
+        won = infos.get("won", False)
         
         return obs, score, done, {
             "admissible_commands": self.admissible_commands,
@@ -232,6 +243,7 @@ class AlfWorldEnv:
             except Exception:
                 pass
             self.env = None
+            self.env_id = None
 
 
 def create_env_for_game(alfworld_data_path: str, game_path: str) -> Tuple[AlfWorldEnv, str, Dict]:
@@ -250,4 +262,3 @@ def create_env_for_game(alfworld_data_path: str, game_path: str) -> Tuple[AlfWor
     env = AlfWorldEnv(alfworld_data_path)
     obs, info = env.reset(game_path)
     return env, obs, info
-
