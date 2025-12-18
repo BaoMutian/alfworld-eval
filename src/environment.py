@@ -25,6 +25,7 @@ def suppress_stdout():
         finally:
             sys.stdout = old_stdout
 
+
 # Task type mapping
 TASK_TYPES = {
     1: "pick_and_place_simple",
@@ -80,19 +81,54 @@ def get_game_id_from_path(game_path: str) -> str:
 
 
 class AlfredDemangler(textworld.core.Wrapper):
-    """Wrapper to demangle Alfred object names."""
+    """Wrapper to demangle Alfred object names.
+    
+    This is a fixed version of the original ALFWorld demangler that handles
+    duplicate object IDs correctly.
+    """
 
     def load(self, *args, **kwargs):
         super().load(*args, **kwargs)
-        try:
-            # Import here to avoid circular imports
-            from alfworld.agents.utils.misc import Demangler
-            demangler = Demangler(game_infos=self._entity_infos, shuffle=False)
-            for info in self._entity_infos.values():
-                info.name = demangler.demangle_alfred_name(info.id)
-        except (IndexError, KeyError) as e:
-            # Some games have inconsistent object counts, skip demangling
-            logger.warning(f"Demangler failed, using raw names: {e}")
+        self._demangle_names()
+
+    def _demangle_names(self):
+        """Demangle Alfred object names to human-readable format."""
+        # Collect all unique IDs first
+        ids = sorted(set(info.id for info in self._entity_infos.values()))
+        
+        # Count object types (fixed: count unique IDs only)
+        obj_count = {}
+        for obj_id in ids:
+            splits = obj_id.split("_bar_", 1)
+            if len(splits) > 1:
+                name = splits[0]
+                if "basin" in obj_id:
+                    name += "basin"
+                obj_count[name] = obj_count.get(name, 0) + 1
+
+        # Create ID assignment (1-indexed)
+        obj_num_ids = {name: list(range(1, count + 1)) for name, count in obj_count.items()}
+        
+        # Build name mapping
+        obj_names = {}
+        for obj_id in ids:
+            text = obj_id.replace("_bar_", "|").replace("_minus_", "-")
+            text = text.replace("_plus_", "+").replace("_dot_", ".").replace("_comma_", ",")
+            
+            splits = text.split("|", 1)
+            if len(splits) == 1:
+                obj_names[obj_id] = f"{text}"
+            else:
+                name = splits[0]
+                if "basin" in obj_id:
+                    name += "basin"
+                num_id = obj_num_ids[name].pop(0)  # pop from front for consistent ordering
+                obj_names[obj_id] = f"{name} {num_id}"
+
+        # Apply demangled names
+        for info in self._entity_infos.values():
+            if info.id in obj_names:
+                info.name = obj_names[info.id]
 
 
 class AlfWorldEnv:
