@@ -25,6 +25,7 @@ from .utils import (
     format_progress,
     format_game_result,
     get_timestamp,
+    setup_logging,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,13 +33,13 @@ logger = logging.getLogger(__name__)
 
 def generate_run_id(config: Config) -> str:
     """Generate a stable run ID based on configuration.
-    
+
     This ensures that the same configuration always produces the same run ID,
     enabling checkpoint resume functionality.
-    
+
     Args:
         config: Evaluation configuration.
-        
+
     Returns:
         Stable run ID string.
     """
@@ -53,16 +54,16 @@ def generate_run_id(config: Config) -> str:
         "use_few_shot": config.prompt.use_few_shot,
         "history_length": config.prompt.history_length,
     }
-    
+
     # Generate hash from key parameters
     params_str = json.dumps(key_params, sort_keys=True)
     params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
-    
+
     # Create readable run ID
     model_short = config.llm.model.split("/")[-1]
     task_str = "all" if config.test.task_types is None else f"t{''.join(map(str, config.test.task_types))}"
     num_str = "full" if config.test.num_games is None else f"n{config.test.num_games}"
-    
+
     return f"{model_short}_{config.test.split}_{task_str}_{num_str}_{params_hash}"
 
 
@@ -91,10 +92,14 @@ class Evaluator:
 
         # Generate stable run ID based on configuration (enables checkpoint resume)
         self.run_id = generate_run_id(config)
-        
+
         self.checkpoint_path = self.output_dir / f"{self.run_id}_checkpoint.json"
-        # Results file will be generated with timestamp when complete
         self.results_path = self.output_dir / f"{self.run_id}_results.json"
+        self.debug_log_path = self.output_dir / f"{self.run_id}_debug.log"
+        
+        # Setup debug logging with run_id-specific log file
+        if config.runtime.debug:
+            setup_logging(debug=True, log_file=str(self.debug_log_path))
 
     def _load_checkpoint(self) -> None:
         """Load checkpoint if exists."""
@@ -217,8 +222,10 @@ class Evaluator:
         print(Colors.highlight("=" * 60))
         print(f"  Model:    {Colors.info(self.config.llm.model)}")
         print(f"  Split:    {Colors.info(self.config.test.split)}")
-        print(f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
-        print(f"  Workers:  {Colors.info(str(self.config.runtime.parallel_workers))}")
+        print(
+            f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
+        print(
+            f"  Workers:  {Colors.info(str(self.config.runtime.parallel_workers))}")
         print(f"  Run ID:   {Colors.dim(self.run_id)}")
         print(Colors.highlight("=" * 60))
         print()
@@ -247,7 +254,8 @@ class Evaluator:
                     f"{Colors.warning(str(len(remaining_files)))} remaining"
                 )
             else:
-                print(f"Remaining: {Colors.warning(str(len(remaining_files)))}")
+                print(
+                    f"Remaining: {Colors.warning(str(len(remaining_files)))}")
             print()
 
             # Run evaluation with parallel workers
@@ -307,14 +315,15 @@ class Evaluator:
 
         # Save final results (with timestamp for completed runs)
         timestamp = get_timestamp().replace(":", "-")
-        final_results_path = self.output_dir / f"{self.run_id}_{timestamp}_results.json"
+        final_results_path = self.output_dir / \
+            f"{self.run_id}_{timestamp}_results.json"
         save_results(
             results=self._results,
             config_dict=self.config.to_dict(),
             output_path=str(final_results_path),
             model_name=self.config.llm.model,
         )
-        
+
         # Also save to the standard path (for easy access to latest results)
         save_results(
             results=self._results,
@@ -339,8 +348,10 @@ class Evaluator:
             else Colors.BRIGHT_RED
         )
         print(f"  Total games:     {summary['total_games']}")
-        print(f"  Successes:       {Colors.success(str(summary['successes']))}")
-        print(f"  Success rate:    {rate_color}{summary['success_rate']:.2%}{Colors.RESET}")
+        print(
+            f"  Successes:       {Colors.success(str(summary['successes']))}")
+        print(
+            f"  Success rate:    {rate_color}{summary['success_rate']:.2%}{Colors.RESET}")
         print(f"  Avg steps:       {summary['avg_steps']:.1f}")
         print(f"  Success avg:     {summary['success_avg_steps']:.1f}")
 

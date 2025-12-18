@@ -31,9 +31,9 @@ prompt:
 # Runtime Configuration
 runtime:
   parallel_workers: 1  # number of parallel workers
-  save_interval: 10  # save checkpoint every N completed games
+  save_interval: 1  # save checkpoint every N completed games
   output_dir: "results"  # output directory for results
-  debug: false  # print detailed prompts and responses
+  debug: true  # print detailed prompts and responses
 
 # Data Configuration
 data:

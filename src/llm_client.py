@@ -1,7 +1,7 @@
 """LLM client with retry mechanism for OpenAI-compatible APIs."""
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict
 
 from openai import OpenAI
 from tenacity import (
@@ -62,16 +62,11 @@ class LLMClient:
         
         return _chat
 
-    def chat(
-        self,
-        messages: List[Dict[str, str]],
-        debug: bool = False,
-    ) -> str:
+    def chat(self, messages: List[Dict[str, str]]) -> str:
         """Send chat completion request with retry.
         
         Args:
             messages: List of message dicts with 'role' and 'content'.
-            debug: Whether to print debug information.
             
         Returns:
             Model response content.
@@ -79,42 +74,19 @@ class LLMClient:
         Raises:
             Exception: If all retries fail.
         """
-        if debug:
-            logger.debug("=" * 60)
-            logger.debug("LLM REQUEST")
-            logger.debug("=" * 60)
-            for msg in messages:
-                logger.debug(f"[{msg['role'].upper()}]")
-                logger.debug(msg['content'][:500] + "..." if len(msg['content']) > 500 else msg['content'])
-            logger.debug("=" * 60)
-        
         try:
             response = self._chat_with_retry(messages)
-            
-            if debug:
-                logger.debug("LLM RESPONSE")
-                logger.debug("=" * 60)
-                logger.debug(response)
-                logger.debug("=" * 60)
-            
             return response
-            
         except Exception as e:
             logger.error(f"LLM request failed after {self.retry_config.max_retries} retries: {e}")
             raise
 
-    def chat_simple(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        debug: bool = False,
-    ) -> str:
+    def chat_simple(self, system_prompt: str, user_prompt: str) -> str:
         """Simple chat interface with system and user prompts.
         
         Args:
             system_prompt: System prompt content.
             user_prompt: User prompt content.
-            debug: Whether to print debug information.
             
         Returns:
             Model response content.
@@ -123,5 +95,4 @@ class LLMClient:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-        return self.chat(messages, debug=debug)
-
+        return self.chat(messages)

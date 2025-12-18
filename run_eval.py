@@ -219,11 +219,8 @@ def main():
         print(f"Configuration error: {e}")
         sys.exit(1)
     
-    # Setup logging
-    log_file = None
-    if config.runtime.debug:
-        log_file = Path(config.runtime.output_dir) / "debug.log"
-    setup_logging(debug=config.runtime.debug, log_file=str(log_file) if log_file else None)
+    # Setup logging (basic setup, debug log will be set by evaluator with run_id)
+    setup_logging(debug=config.runtime.debug, log_file=None)
     
     # Run evaluation
     try:

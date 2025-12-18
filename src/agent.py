@@ -9,6 +9,13 @@ from .llm_client import LLMClient
 from .environment import AlfWorldEnv
 from .prompts import SYSTEM_PROMPT, build_user_prompt, get_few_shot_examples
 from .prompts.system import extract_task_description
+from .utils import (
+    Colors,
+    log_game_start,
+    log_game_end,
+    log_step_interaction,
+    format_step_info,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +52,7 @@ class ReActAgent:
             llm_client: LLM client for generating responses.
             use_few_shot: Whether to include few-shot examples.
             history_length: Number of recent history entries to include.
-            debug: Whether to print debug information.
+            debug: Whether to enable debug mode.
         """
         self.llm_client = llm_client
         self.use_few_shot = use_few_shot
@@ -159,10 +166,12 @@ class ReActAgent:
         current_obs = initial_obs
         result.observations.append(current_obs)
 
+        # Log game start to debug file
         if self.debug:
-            logger.info(f"Starting game: {info['game_id']}")
-            logger.info(f"Task: {task_description}")
-            logger.info(f"Initial observation: {current_obs[:200]}...")
+            log_game_start(info["game_id"], task_description)
+            # Terminal: show game start
+            print(f"\n{Colors.info('Game:')} {info['game_id']}")
+            print(f"{Colors.dim('Goal:')} {task_description}")
 
         try:
             for step in range(max_steps):
@@ -179,15 +188,10 @@ class ReActAgent:
                 response = self.llm_client.chat_simple(
                     system_prompt=SYSTEM_PROMPT,
                     user_prompt=user_prompt,
-                    debug=self.debug,
                 )
 
                 # Parse response
                 thought, action = self.parse_response(response)
-
-                if self.debug:
-                    logger.info(f"Step {step + 1}: Think: {thought[:100]}...")
-                    logger.info(f"Step {step + 1}: Action: {action}")
 
                 result.thoughts.append(thought)
                 result.actions.append(action)
@@ -196,9 +200,18 @@ class ReActAgent:
                 obs, reward, done, step_info = env.step(action)
                 result.observations.append(obs)
 
+                # Log to debug file (complete prompt and response)
                 if self.debug:
-                    logger.info(
-                        f"Step {step + 1}: Observation: {obs[:100]}...")
+                    log_step_interaction(
+                        step=step + 1,
+                        system_prompt=SYSTEM_PROMPT,
+                        user_prompt=user_prompt,
+                        response=response,
+                        action=action,
+                        observation=obs,
+                    )
+                    # Terminal: show concise step info
+                    print(format_step_info(step + 1, action, obs))
 
                 # Update history
                 history.append((action, obs))
@@ -209,18 +222,22 @@ class ReActAgent:
                 if step_info.get("won", False):
                     result.success = True
                     if self.debug:
-                        logger.info(f"Game won at step {step + 1}!")
+                        print(f"  {Colors.success('>>> Task completed!')}")
                     break
 
                 # Check if done (but not won)
                 if done and not step_info.get("won", False):
                     if self.debug:
-                        logger.info(f"Game ended at step {step + 1} (not won)")
+                        print(f"  {Colors.warning('>>> Game ended (not won)')}")
                     break
 
         except Exception as e:
             result.error = str(e)
             logger.error(f"Error during game {info['game_id']}: {e}")
+
+        # Log game end to debug file
+        if self.debug:
+            log_game_end(info["game_id"], result.success, result.steps)
 
         return result
 
