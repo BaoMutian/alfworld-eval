@@ -250,19 +250,3 @@ class AlfWorldEnv:
             self.env_id = None
 
 
-def create_env_for_game(alfworld_data_path: str, game_path: str) -> Tuple[AlfWorldEnv, str, Dict]:
-    """Create and reset environment for a specific game.
-
-    This is a helper function for parallel execution where each worker
-    needs its own environment instance.
-
-    Args:
-        alfworld_data_path: Path to ALFWorld data.
-        game_path: Path to game file.
-
-    Returns:
-        Tuple of (env, initial_observation, info).
-    """
-    env = AlfWorldEnv(alfworld_data_path)
-    obs, info = env.reset(game_path)
-    return env, obs, info

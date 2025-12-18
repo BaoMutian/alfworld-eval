@@ -184,7 +184,7 @@ def run_single_game(
     max_steps: int = 30,
     debug: bool = False,
 ) -> GameResult:
-    """Run a single game from scratch (suitable for parallel execution)."""
+    """Run a single game from scratch."""
     env = None
     try:
         env = AlfWorldEnv(alfworld_data_path)

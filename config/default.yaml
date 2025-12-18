@@ -30,9 +30,9 @@ prompt:
 
 # Runtime Configuration
 runtime:
-  save_interval: 2
+  save_interval: 1
   output_dir: "results"
-  debug: false
+  debug: true
 
 # Data Configuration
 data:
