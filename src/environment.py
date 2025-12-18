@@ -1,8 +1,10 @@
 """ALFWorld environment wrapper using textworld.gym interface."""
 
 import os
+import sys
 import json
 import logging
+from contextlib import contextmanager
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -10,6 +12,18 @@ import textworld
 import textworld.gym
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def suppress_stdout():
+    """Context manager to suppress stdout (for PDDL planner output)."""
+    with open(os.devnull, 'w') as devnull:
+        old_stdout = sys.stdout
+        sys.stdout = devnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
 
 # Task type mapping
 TASK_TYPES = {
@@ -70,11 +84,15 @@ class AlfredDemangler(textworld.core.Wrapper):
 
     def load(self, *args, **kwargs):
         super().load(*args, **kwargs)
-        # Import here to avoid circular imports
-        from alfworld.agents.utils.misc import Demangler
-        demangler = Demangler(game_infos=self._entity_infos, shuffle=False)
-        for info in self._entity_infos.values():
-            info.name = demangler.demangle_alfred_name(info.id)
+        try:
+            # Import here to avoid circular imports
+            from alfworld.agents.utils.misc import Demangler
+            demangler = Demangler(game_infos=self._entity_infos, shuffle=False)
+            for info in self._entity_infos.values():
+                info.name = demangler.demangle_alfred_name(info.id)
+        except (IndexError, KeyError) as e:
+            # Some games have inconsistent object counts, skip demangling
+            logger.warning(f"Demangler failed, using raw names: {e}")
 
 
 class AlfWorldEnv:
@@ -183,18 +201,20 @@ class AlfWorldEnv:
             max_score=True,
         )
 
-        self.env_id = textworld.gym.register_game(
-            game_path,
-            request_infos,
-            max_episode_steps=1000,
-            wrappers=[AlfredDemangler()],
-        )
+        # Suppress PDDL planner output during game registration
+        with suppress_stdout():
+            self.env_id = textworld.gym.register_game(
+                game_path,
+                request_infos,
+                max_episode_steps=1000,
+                wrappers=[AlfredDemangler()],
+            )
 
-        # Create environment
-        self.env = textworld.gym.make(self.env_id)
+            # Create environment
+            self.env = textworld.gym.make(self.env_id)
 
-        # Reset and get initial observation
-        obs, infos = self.env.reset()
+            # Reset and get initial observation
+            obs, infos = self.env.reset()
 
         # Store admissible commands
         self.admissible_commands = infos.get("admissible_commands", [])

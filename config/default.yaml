@@ -17,7 +17,7 @@ retry:
 
 # Test Configuration
 test:
-  num_games: 3  # null means all games in the split
+  num_games: 10  # null means all games in the split
   task_types: null  # null means all types, or list like [1, 2, 3, 4, 5, 6]
   split: "valid_seen"  # valid_seen, valid_train, valid_unseen
   seed: 42
@@ -26,14 +26,14 @@ test:
 # Prompt Configuration
 prompt:
   use_few_shot: true
-  history_length: 20  # number of recent (action, observation) pairs to keep
+  history_length: 30  # number of recent (action, observation) pairs to keep
 
 # Runtime Configuration
 runtime:
-  parallel_workers: 10  # number of parallel workers
-  save_interval: 10  # save checkpoint every N completed games
+  parallel_workers: 2  # number of parallel workers
+  save_interval: 2  # save checkpoint every N completed games
   output_dir: "results"  # output directory for results
-  debug: true  # print detailed prompts and responses
+  debug: false  # print detailed prompts and responses
 
 # Data Configuration
 data:
