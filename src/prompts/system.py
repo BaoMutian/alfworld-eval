@@ -21,9 +21,9 @@ Navigation:
 
 Object Manipulation:
   - take [object] from [receptacle] : Pick up an object (e.g., "take apple 1 from fridge 1")
-  - put [object] in/on [receptacle] : Place object (e.g., "put apple 1 in fridge 1")
-  - open [receptacle]              : Open a container (e.g., "open fridge 1")
-  - close [receptacle]             : Close a container
+  - move [object] to [receptacle]   : Place object (e.g., "move apple 1 to fridge 1")
+  - open [receptacle]               : Open a container (e.g., "open fridge 1")
+  - close [receptacle]              : Close a container
 
 Object Processing:
   - heat [object] with [receptacle] : Heat with microwave (e.g., "heat egg 1 with microwave 1")

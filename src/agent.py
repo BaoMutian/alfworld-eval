@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional, Dict, Any
 
 from .llm_client import LLMClient
 from .environment import AlfWorldEnv
-from .prompts import SYSTEM_PROMPT, build_user_prompt, get_few_shot_examples
+from .prompts import SYSTEM_PROMPT, build_user_prompt, get_few_shot_examples, FEW_SHOT_EXAMPLES
 from .prompts.system import extract_task_description
 from .logging_utils import (
     Colors,
@@ -156,10 +156,8 @@ class ReActAgent:
             goal=task_description,  # Save the goal
         )
 
-        # Get few-shot examples if enabled
-        few_shot = None
-        if self.use_few_shot:
-            few_shot = get_few_shot_examples(info["task_type_id"])
+        # Get static few-shot examples if enabled
+        few_shot = get_few_shot_examples() if self.use_few_shot else None
 
         # Initialize history and current observation
         history: List[Tuple[str, str]] = []
@@ -200,11 +198,10 @@ class ReActAgent:
                 obs, reward, done, step_info = env.step(action)
                 result.observations.append(obs)
 
-                # Log to debug file (complete prompt and response)
+                # Log to debug file (user prompt and response only)
                 if self.debug:
                     log_step_interaction(
                         step=step + 1,
-                        system_prompt=SYSTEM_PROMPT,
                         user_prompt=user_prompt,
                         response=response,
                         action=action,

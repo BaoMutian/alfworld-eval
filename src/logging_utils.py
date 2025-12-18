@@ -129,6 +129,9 @@ def setup_logging(debug: bool = False, log_file: Optional[str] = None) -> None:
         _debug_file_logger.setLevel(logging.DEBUG)
         _debug_file_logger.propagate = False  # Don't propagate to root logger
         
+        # Clear existing handlers for debug logger
+        _debug_file_logger.handlers.clear()
+        
         # File handler for debug logger
         file_formatter = logging.Formatter(
             "[%(asctime)s] %(message)s",
@@ -138,6 +141,22 @@ def setup_logging(debug: bool = False, log_file: Optional[str] = None) -> None:
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(file_formatter)
         _debug_file_logger.addHandler(file_handler)
+
+
+def log_system_prompt(system_prompt: str) -> None:
+    """Log the system prompt once at the beginning.
+    
+    Args:
+        system_prompt: System prompt content.
+    """
+    debug_logger = get_debug_logger()
+    if debug_logger:
+        debug_logger.debug("=" * 80)
+        debug_logger.debug("SYSTEM PROMPT (used for all games)")
+        debug_logger.debug("=" * 80)
+        debug_logger.debug(system_prompt)
+        debug_logger.debug("=" * 80)
+        debug_logger.debug("")
 
 
 def log_game_start(game_id: str, goal: str) -> None:
@@ -174,17 +193,17 @@ def log_game_end(game_id: str, success: bool, steps: int) -> None:
 
 def log_step_interaction(
     step: int,
-    system_prompt: str,
     user_prompt: str,
     response: str,
     action: str,
     observation: str,
 ) -> None:
-    """Log a complete step interaction to debug file.
+    """Log a step interaction to debug file (without system prompt).
+    
+    System prompt is logged once separately via log_system_prompt().
     
     Args:
         step: Step number.
-        system_prompt: System prompt sent to LLM.
         user_prompt: User prompt sent to LLM.
         response: LLM response.
         action: Parsed action.
@@ -195,9 +214,6 @@ def log_step_interaction(
         debug_logger.debug("-" * 80)
         debug_logger.debug(f"STEP {step}")
         debug_logger.debug("-" * 80)
-        debug_logger.debug("")
-        debug_logger.debug(">>> SYSTEM PROMPT:")
-        debug_logger.debug(system_prompt)
         debug_logger.debug("")
         debug_logger.debug(">>> USER PROMPT:")
         debug_logger.debug(user_prompt)
@@ -231,4 +247,3 @@ def format_step_info(step: int, action: str, observation: str, max_obs_len: int 
         f"{Colors.info('Action:')} {action}\n"
         f"           {Colors.dim('Obs:')} {obs_display}"
     )
-

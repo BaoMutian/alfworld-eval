@@ -26,7 +26,9 @@ from .utils import (
     format_game_result,
     get_timestamp,
     setup_logging,
+    log_system_prompt,
 )
+from .prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +232,10 @@ class Evaluator:
         print(f"  Run ID:   {Colors.dim(self.run_id)}")
         print(Colors.highlight("=" * 60))
         print()
+
+        # Log system prompt once at the beginning (debug mode only)
+        if self.config.runtime.debug:
+            log_system_prompt(SYSTEM_PROMPT)
 
         # Load checkpoint (will resume if same config)
         self._load_checkpoint()
