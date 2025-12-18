@@ -166,7 +166,7 @@ Task completed!"""
 
 def get_few_shot_examples() -> str:
     """Get static few-shot examples.
-    
+
     Returns:
         Few-shot examples string.
     """

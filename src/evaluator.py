@@ -28,7 +28,7 @@ from .utils import (
     setup_logging,
     log_system_prompt,
 )
-from .prompts import SYSTEM_PROMPT
+from .prompts import get_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +235,8 @@ class Evaluator:
 
         # Log system prompt once at the beginning (debug mode only)
         if self.config.runtime.debug:
-            log_system_prompt(SYSTEM_PROMPT)
+            system_prompt = get_system_prompt(self.config.prompt.use_few_shot)
+            log_system_prompt(system_prompt)
 
         # Load checkpoint (will resume if same config)
         self._load_checkpoint()

@@ -1,8 +1,11 @@
 """System prompt and user prompt builder for ALFWorld evaluation."""
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
-SYSTEM_PROMPT = """You are an intelligent agent operating in a household environment. Your goal is to complete tasks by interacting with objects and navigating through rooms.
+from .few_shot import FEW_SHOT_EXAMPLES
+
+# Base system prompt without few-shot examples
+_SYSTEM_PROMPT_BASE = """You are an intelligent agent operating in a household environment. Your goal is to complete tasks by interacting with objects and navigating through rooms.
 
 ==================================================
 ENVIRONMENT RULES
@@ -51,36 +54,53 @@ IMPORTANT:
 - If stuck, use "check valid actions" to see available options
 - If an action fails, try a different approach"""
 
+# System prompt with few-shot examples
+SYSTEM_PROMPT_WITH_EXAMPLES = _SYSTEM_PROMPT_BASE + """
+
+==================================================
+EXAMPLE DEMONSTRATIONS
+==================================================
+The following examples show how to complete various tasks:
+
+""" + FEW_SHOT_EXAMPLES
+
+# System prompt without few-shot examples (for backward compatibility)
+SYSTEM_PROMPT = _SYSTEM_PROMPT_BASE
+
+
+def get_system_prompt(use_few_shot: bool = True) -> str:
+    """Get system prompt with or without few-shot examples.
+    
+    Args:
+        use_few_shot: Whether to include few-shot examples.
+        
+    Returns:
+        System prompt string.
+    """
+    if use_few_shot:
+        return SYSTEM_PROMPT_WITH_EXAMPLES
+    return SYSTEM_PROMPT
+
 
 def build_user_prompt(
     task_description: str,
     history: List[Tuple[str, str]],
     current_observation: str,
     history_length: int = 10,
-    few_shot_examples: Optional[str] = None,
 ) -> str:
     """Build user prompt with task, history, and current observation.
-    
+
     Args:
         task_description: The task goal description.
         history: List of (action, observation) tuples.
         current_observation: The most recent observation.
         history_length: Number of recent history entries to include.
-        few_shot_examples: Optional few-shot examples string.
-        
+
     Returns:
         Formatted user prompt string.
     """
     parts = []
-    
-    # Add few-shot examples if provided
-    if few_shot_examples:
-        parts.append("==================================================")
-        parts.append("EXAMPLE DEMONSTRATIONS")
-        parts.append("==================================================")
-        parts.append(few_shot_examples)
-        parts.append("")
-    
+
     # Add current task
     parts.append("==================================================")
     parts.append("YOUR CURRENT TASK")
@@ -92,42 +112,42 @@ def build_user_prompt(
     parts.append("  - Type 'inventory' to check what you're carrying")
     parts.append("  - Type 'look' to observe your surroundings")
     parts.append("")
-    
+
     # Add recent history
     parts.append("==================================================")
     parts.append("RECENT HISTORY")
     parts.append("==================================================")
-    
+
     # Limit history length
     recent_history = history[-history_length:] if len(history) > history_length else history
-    
+
     if recent_history:
         for action, observation in recent_history:
             parts.append(f"Action: {action}")
             parts.append(f"Observation: {observation}")
             parts.append("")
-    
+
     # Add current observation
     parts.append("Current Observation:")
     parts.append(current_observation)
     parts.append("")
-    
+
     # Reminder
     parts.append("==================================================")
     parts.append("YOUR TURN")
     parts.append("==================================================")
     parts.append("Based on the task goal and current observation, decide your next action.")
     parts.append("Remember to use the exact format: Think: ... Action: ...")
-    
+
     return "\n".join(parts)
 
 
 def extract_task_description(initial_observation: str) -> str:
     """Extract task description from initial observation.
-    
+
     Args:
         initial_observation: The initial environment observation.
-        
+
     Returns:
         Task description string.
     """
@@ -136,7 +156,6 @@ def extract_task_description(initial_observation: str) -> str:
     for line in lines:
         if "your task is to" in line.lower():
             return line.strip()
-    
+
     # Return full observation if no specific task found
     return initial_observation.strip()
-

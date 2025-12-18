@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional, Dict, Any
 
 from .llm_client import LLMClient
 from .environment import AlfWorldEnv
-from .prompts import SYSTEM_PROMPT, build_user_prompt, get_few_shot_examples, FEW_SHOT_EXAMPLES
+from .prompts import get_system_prompt, build_user_prompt
 from .prompts.system import extract_task_description
 from .logging_utils import (
     Colors,
@@ -50,7 +50,7 @@ class ReActAgent:
 
         Args:
             llm_client: LLM client for generating responses.
-            use_few_shot: Whether to include few-shot examples.
+            use_few_shot: Whether to include few-shot examples in system prompt.
             history_length: Number of recent history entries to include.
             debug: Whether to enable debug mode.
         """
@@ -58,6 +58,8 @@ class ReActAgent:
         self.use_few_shot = use_few_shot
         self.history_length = history_length
         self.debug = debug
+        # Get system prompt (with or without few-shot examples)
+        self.system_prompt = get_system_prompt(use_few_shot)
 
     def parse_response(self, response: str) -> Tuple[str, str]:
         """Parse LLM response to extract thought and action.
@@ -102,7 +104,7 @@ class ReActAgent:
         if not action:
             # Look for common action patterns
             action_keywords = [
-                "go to", "take", "put", "open", "close", "use",
+                "go to", "take", "move", "open", "close", "use",
                 "heat", "cool", "clean", "look", "examine", "inventory",
                 "check valid actions"
             ]
@@ -156,9 +158,6 @@ class ReActAgent:
             goal=task_description,  # Save the goal
         )
 
-        # Get static few-shot examples if enabled
-        few_shot = get_few_shot_examples() if self.use_few_shot else None
-
         # Initialize history and current observation
         history: List[Tuple[str, str]] = []
         current_obs = initial_obs
@@ -173,18 +172,17 @@ class ReActAgent:
 
         try:
             for step in range(max_steps):
-                # Build prompts
+                # Build user prompt (few-shot is now in system prompt)
                 user_prompt = build_user_prompt(
                     task_description=task_description,
                     history=history,
                     current_observation=current_obs,
                     history_length=self.history_length,
-                    few_shot_examples=few_shot,
                 )
 
                 # Get LLM response
                 response = self.llm_client.chat_simple(
-                    system_prompt=SYSTEM_PROMPT,
+                    system_prompt=self.system_prompt,
                     user_prompt=user_prompt,
                 )
 
@@ -257,7 +255,7 @@ def run_single_game(
         alfworld_data_path: Path to ALFWorld data.
         game_file: Path to game.tw-pddl file.
         llm_client: LLM client (can be shared across workers).
-        use_few_shot: Whether to use few-shot examples.
+        use_few_shot: Whether to use few-shot examples in system prompt.
         history_length: History length for prompts.
         max_steps: Maximum steps per game.
         debug: Debug mode.
