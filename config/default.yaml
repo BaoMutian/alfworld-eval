@@ -17,7 +17,7 @@ retry:
 
 # Test Configuration
 test:
-  num_games: 10
+  num_games: 2
   task_types: null # null means all types, or list like [1, 2, 3, 4, 5, 6]
   split: "valid_seen"
   seed: 42
@@ -40,8 +40,8 @@ data:
 
 # Memory Configuration (ReasoningBank)
 memory:
-  enabled: false
-  mode: "baseline" # baseline | retrieve_only | retrieve_and_extract
+  enabled: true
+  mode: "retrieve_and_extract" # baseline | retrieve_only | retrieve_and_extract
 
   # Storage configuration
   memory_dir: "memory_banks"

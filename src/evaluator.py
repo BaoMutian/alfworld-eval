@@ -238,7 +238,16 @@ class Evaluator:
             # Retrieve memories
             retrieved = self.memory_retriever.retrieve(goal)
             
-            if retrieved and self.config.runtime.debug:
+            # Display retrieval info
+            if retrieved:
+                for rm in retrieved:
+                    result_tag = Colors.success("✓") if rm.is_success else Colors.warning("✗")
+                    tqdm.write(
+                        f"  {Colors.info('📚 Memory:')} {result_tag} "
+                        f"sim={rm.similarity:.2f} | {rm.memory_items[0].title if rm.memory_items else 'No title'}"
+                    )
+            
+            if self.config.runtime.debug and retrieved:
                 logger.debug(
                     f"Retrieved {len(retrieved)} memories for goal: {goal[:50]}..."
                 )
@@ -279,6 +288,17 @@ class Evaluator:
 
             if memory:
                 self.memory_store.add(memory)
+                # Display extraction info
+                result_tag = Colors.success("✓") if memory.is_success else Colors.warning("✗")
+                item_titles = [item.title for item in memory.memory_items[:2]]
+                titles_str = ", ".join(item_titles)
+                if len(memory.memory_items) > 2:
+                    titles_str += f" +{len(memory.memory_items) - 2}"
+                tqdm.write(
+                    f"  {Colors.info('💡 Extracted:')} {result_tag} "
+                    f"{len(memory.memory_items)} items | {titles_str}"
+                )
+                
                 if self.config.runtime.debug:
                     logger.debug(
                         f"Extracted and stored memory {memory.memory_id} "
@@ -286,6 +306,7 @@ class Evaluator:
                     )
 
         except Exception as e:
+            tqdm.write(f"  {Colors.error('⚠ Extract failed:')} {str(e)[:50]}")
             logger.error(f"Memory extraction failed for {result.game_id}: {e}")
             # Don't propagate - extraction failure shouldn't stop evaluation
 
