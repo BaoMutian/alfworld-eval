@@ -16,7 +16,6 @@ from .logging_utils import (
     Colors,
     log_game_start,
     log_game_end,
-    log_step_interaction,
     format_step_info,
 )
 
@@ -166,6 +165,9 @@ class ReActAgent:
                 response = self.llm_client.chat_simple(
                     system_prompt=self.system_prompt,
                     user_prompt=user_prompt,
+                    context="Agent Step",
+                    step=step + 1,
+                    game_id=info["game_id"],
                 )
 
                 thought, action = self.parse_response(response)
@@ -176,8 +178,6 @@ class ReActAgent:
                 result.observations.append(obs)
 
                 if self.debug:
-                    log_step_interaction(
-                        step + 1, user_prompt, response, action, obs)
                     print(format_step_info(step + 1, action, obs))
 
                 history.append((action, obs))

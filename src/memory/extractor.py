@@ -163,6 +163,8 @@ class MemoryExtractor:
             response = self.llm_client.chat_simple(
                 system_prompt="You are an expert at analyzing task execution and extracting reusable strategies.",
                 user_prompt=prompt,
+                context="Memory Extraction",
+                game_id=task_id,
             )
 
             # Parse response
@@ -239,6 +241,8 @@ class MemoryExtractor:
             response = self.llm_client.chat_simple(
                 system_prompt="You are an expert at analyzing task execution and extracting patterns from multiple attempts.",
                 user_prompt=prompt,
+                context="Contrastive Memory Extraction",
+                game_id=task_id,
             )
 
             # Parse response
