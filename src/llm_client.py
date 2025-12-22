@@ -3,7 +3,6 @@
 import logging
 from typing import List, Dict, Optional, Any
 
-import httpx
 from openai import OpenAI
 from tenacity import (
     retry,
@@ -31,19 +30,13 @@ class LLMClient:
         self.config = llm_config
         self.retry_config = retry_config
 
-        # Use httpx client for better compatibility with vLLM
-        http_client = httpx.Client(
-            transport=httpx.HTTPTransport(local_address="0.0.0.0"),
-            timeout=float(llm_config.timeout),
-        )
-
-        # Use "EMPTY" as api_key for local vLLM deployment if not set
-        api_key = llm_config.api_key if llm_config.api_key else "EMPTY"
+        # Use "EMPTY" as api_key for local deployment if not set
+        api_key = llm_config.api_key or "EMPTY"
 
         self.client = OpenAI(
             api_key=api_key,
             base_url=llm_config.api_base_url,
-            http_client=http_client,
+            timeout=float(llm_config.timeout),
         )
 
         # Build extra_body for vLLM (Qwen3 thinking mode)
@@ -54,40 +47,6 @@ class LLMClient:
                     "enable_thinking": llm_config.enable_thinking
                 }
             }
-
-        # Create retry decorator with config
-        self._chat_with_retry = self._create_retry_wrapper()
-
-    def _create_retry_wrapper(self):
-        """Create a retry-wrapped chat completion function."""
-        @retry(
-            stop=stop_after_attempt(self.retry_config.max_retries),
-            wait=wait_exponential(
-                multiplier=self.retry_config.retry_interval,
-                max=self.retry_config.max_retry_interval,
-            ),
-            retry=retry_if_exception_type((Exception,)),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
-            reraise=True,
-        )
-        def _chat(messages: List[Dict[str, str]]) -> str:
-            kwargs = {
-                "model": self.config.model,
-                "messages": messages,
-                "temperature": self.config.temperature,
-            }
-            # Only add max_tokens if it's positive (0 means no limit)
-            if self.config.max_tokens and self.config.max_tokens > 0:
-                kwargs["max_tokens"] = self.config.max_tokens
-
-            # Add extra_body for vLLM (Qwen3 thinking mode)
-            if self.extra_body:
-                kwargs["extra_body"] = self.extra_body
-
-            response = self.client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content
-
-        return _chat
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
         """Send chat completion request with retry.
@@ -101,13 +60,31 @@ class LLMClient:
         Raises:
             Exception: If all retries fail.
         """
-        try:
-            response = self._chat_with_retry(messages)
-            return response
-        except Exception as e:
-            logger.error(
-                f"LLM request failed after {self.retry_config.max_retries} retries: {e}")
-            raise
+        @retry(
+            stop=stop_after_attempt(self.retry_config.max_retries),
+            wait=wait_exponential(
+                multiplier=self.retry_config.retry_interval,
+                max=self.retry_config.max_retry_interval,
+            ),
+            retry=retry_if_exception_type(Exception),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )
+        def _call():
+            kwargs = {
+                "model": self.config.model,
+                "messages": messages,
+                "temperature": self.config.temperature,
+            }
+            if self.config.max_tokens and self.config.max_tokens > 0:
+                kwargs["max_tokens"] = self.config.max_tokens
+            if self.extra_body:
+                kwargs["extra_body"] = self.extra_body
+
+            response = self.client.chat.completions.create(**kwargs)
+            return response.choices[0].message.content
+
+        return _call()
 
     def chat_simple(self, system_prompt: str, user_prompt: str) -> str:
         """Simple chat interface with system and user prompts.
@@ -119,8 +96,7 @@ class LLMClient:
         Returns:
             Model response content.
         """
-        messages = [
+        return self.chat([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
-        ]
-        return self.chat(messages)
+        ])
