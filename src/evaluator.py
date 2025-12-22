@@ -56,11 +56,12 @@ def generate_run_id(config: Config) -> str:
     model_short = config.llm.model.split("/")[-1]
     task_str = "all" if not config.test.task_types else f"t{''.join(map(str, config.test.task_types))}"
     num_str = "full" if config.test.num_games is None else f"n{config.test.num_games}"
-    
+
     # Add memory mode suffix if enabled
     memory_suffix = ""
     if config.memory.enabled:
-        mode_short = {"baseline": "base", "retrieve_only": "ret", "retrieve_and_extract": "retex"}
+        mode_short = {"baseline": "base", "retrieve_only": "ret",
+                      "retrieve_and_extract": "retex"}
         memory_suffix = f"_mem{mode_short.get(config.memory.mode, config.memory.mode[:3])}"
 
     return f"{model_short}_{config.test.split}_{task_str}_{num_str}{memory_suffix}_{params_hash}"
@@ -85,7 +86,8 @@ class Evaluator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.run_id = generate_run_id(config)
-        self.checkpoint_path = self.output_dir / f"{self.run_id}_checkpoint.json"
+        self.checkpoint_path = self.output_dir / \
+            f"{self.run_id}_checkpoint.json"
         self.results_path = self.output_dir / f"{self.run_id}_results.json"
         self.debug_log_path = self.output_dir / f"{self.run_id}_debug.log"
 
@@ -179,7 +181,8 @@ class Evaluator:
                 self._success_steps += result.steps
 
         if self._completed_game_ids:
-            print(f"{Colors.info('Checkpoint found:')} {len(self._completed_game_ids)} games completed")
+            print(
+                f"{Colors.info('Checkpoint found:')} {len(self._completed_game_ids)} games completed")
 
     def _save_checkpoint(self) -> None:
         """Save current checkpoint."""
@@ -215,10 +218,10 @@ class Evaluator:
 
     def _retrieve_memories(self, goal: str) -> list:
         """Retrieve relevant memories for a task goal.
-        
+
         Args:
             goal: Task goal description.
-            
+
         Returns:
             List of RetrievedMemory objects.
         """
@@ -228,16 +231,17 @@ class Evaluator:
         try:
             # Retrieve memories
             retrieved = self.memory_retriever.retrieve(goal)
-            
+
             # Display retrieval info
             if retrieved:
                 for rm in retrieved:
-                    result_tag = Colors.success("✓") if rm.is_success else Colors.warning("✗")
+                    result_tag = Colors.success(
+                        "✓") if rm.is_success else Colors.warning("✗")
                     tqdm.write(
                         f"  {Colors.info('📚 Memory:')} {result_tag} "
                         f"sim={rm.similarity:.2f} | {rm.memory_items[0].title if rm.memory_items else 'No title'}"
                     )
-            
+
             if self.config.runtime.debug and retrieved:
                 logger.debug(
                     f"Retrieved {len(retrieved)} memories for goal: {goal[:50]}..."
@@ -251,7 +255,7 @@ class Evaluator:
 
     def _extract_and_store_memory(self, result: GameResult) -> None:
         """Extract memory from game result and store it.
-        
+
         Args:
             result: Game result to extract memory from.
         """
@@ -262,7 +266,8 @@ class Evaluator:
             # Build trajectory from result
             trajectory = []
             for i, action in enumerate(result.actions):
-                obs = result.observations[i + 1] if i + 1 < len(result.observations) else ""
+                obs = result.observations[i + 1] if i + \
+                    1 < len(result.observations) else ""
                 trajectory.append({
                     "action": action,
                     "observation": obs,
@@ -280,7 +285,8 @@ class Evaluator:
             if memory:
                 self.memory_store.add(memory)
                 # Display extraction info
-                result_tag = Colors.success("✓") if memory.is_success else Colors.warning("✗")
+                result_tag = Colors.success(
+                    "✓") if memory.is_success else Colors.warning("✗")
                 item_titles = [item.title for item in memory.memory_items[:2]]
                 titles_str = ", ".join(item_titles)
                 if len(memory.memory_items) > 2:
@@ -289,7 +295,7 @@ class Evaluator:
                     f"  {Colors.info('💡 Extracted:')} {result_tag} "
                     f"{len(memory.memory_items)} items | {titles_str}"
                 )
-                
+
                 if self.config.runtime.debug:
                     logger.debug(
                         f"Extracted and stored memory {memory.memory_id} "
@@ -309,10 +315,10 @@ class Evaluator:
             env = AlfWorldEnv(self.config.data.alfworld_data_path)
             obs, info = env.reset(game_file)
             goal = extract_task_description(obs)
-            
+
             # Retrieve relevant memories using the goal
             retrieved_memories = self._retrieve_memories(goal)
-            
+
             # Create agent
             agent = ReActAgent(
                 llm_client=self.llm_client,
@@ -321,16 +327,17 @@ class Evaluator:
                 debug=self.config.runtime.debug,
                 retrieved_memories=retrieved_memories,
             )
-            
+
             # Run game with existing environment
-            result = agent.run_game(env, obs, info, max_steps=self.config.test.max_steps)
-            
+            result = agent.run_game(
+                env, obs, info, max_steps=self.config.test.max_steps)
+
             # Extract and store memory if enabled
             if self.config.memory.should_extract():
                 self._extract_and_store_memory(result)
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Error running game {game_file}: {e}")
             task_type_id, task_type = get_task_type_from_path(game_file)
@@ -357,24 +364,27 @@ class Evaluator:
         print(Colors.highlight("=" * 60))
         print(f"  Model:    {Colors.info(self.config.llm.model)}")
         print(f"  Split:    {Colors.info(self.config.test.split)}")
-        print(f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
+        print(
+            f"  Tasks:    {Colors.info(str(self.config.test.task_types or 'all'))}")
         print(f"  Run ID:   {Colors.dim(self.run_id)}")
-        
+
         # Print memory info
         if self.config.memory.enabled:
             print(Colors.dim("-" * 40))
             print(f"  Memory:   {Colors.info(self.config.memory.mode)}")
             if self.memory_store:
                 stats = self.memory_store.get_stats()
-                print(f"  Bank:     {Colors.info(str(stats['total_memories']))} memories")
+                print(
+                    f"  Bank:     {Colors.info(str(stats['total_memories']))} memories")
             else:
                 print(f"  Bank:     {Colors.warning('Not initialized')}")
-        
+
         print(Colors.highlight("=" * 60))
         print()
 
         if self.config.runtime.debug:
-            log_system_prompt(get_system_prompt(self.config.prompt.use_few_shot))
+            log_system_prompt(get_system_prompt(
+                self.config.prompt.use_few_shot))
 
         self._load_checkpoint()
 
@@ -397,7 +407,8 @@ class Evaluator:
                     f"{Colors.warning(str(len(remaining_files)))} remaining"
                 )
             else:
-                print(f"Remaining: {Colors.warning(str(len(remaining_files)))}")
+                print(
+                    f"Remaining: {Colors.warning(str(len(remaining_files)))}")
             print()
 
             completed_since_save = 0
@@ -442,7 +453,8 @@ class Evaluator:
         self._save_checkpoint()
 
         timestamp = get_timestamp().replace(":", "-")
-        final_results_path = self.output_dir / f"{self.run_id}_{timestamp}_results.json"
+        final_results_path = self.output_dir / \
+            f"{self.run_id}_{timestamp}_results.json"
 
         save_results(
             results=self._results,
@@ -477,8 +489,10 @@ class Evaluator:
             else Colors.BRIGHT_RED
         )
         print(f"  Total games:     {summary['total_games']}")
-        print(f"  Successes:       {Colors.success(str(summary['successes']))}")
-        print(f"  Success rate:    {rate_color}{summary['success_rate']:.2%}{Colors.RESET}")
+        print(
+            f"  Successes:       {Colors.success(str(summary['successes']))}")
+        print(
+            f"  Success rate:    {rate_color}{summary['success_rate']:.2%}{Colors.RESET}")
         print(f"  Avg steps:       {summary['avg_steps']:.1f}")
         print(f"  Success avg:     {summary['success_avg_steps']:.1f}")
 
@@ -513,7 +527,8 @@ class Evaluator:
         print(f"  Results: {Colors.info(str(final_results_path))}")
         print(f"  Checkpoint: {Colors.dim(str(self.checkpoint_path))}")
         if self.memory_store:
-            print(f"  Memory bank: {Colors.dim(str(self.memory_store.memories_path))}")
+            print(
+                f"  Memory bank: {Colors.dim(str(self.memory_store.memories_path))}")
         print(Colors.highlight("=" * 60))
         print()
 
