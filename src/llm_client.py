@@ -1,7 +1,7 @@
 """LLM client with retry mechanism for OpenAI-compatible APIs."""
 
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 
 from openai import OpenAI
 from tenacity import (
@@ -36,6 +36,15 @@ class LLMClient:
             timeout=llm_config.timeout,
         )
 
+        # Build extra_body for vLLM (Qwen3 thinking mode)
+        self.extra_body: Optional[Dict[str, Any]] = None
+        if llm_config.enable_thinking is not None:
+            self.extra_body = {
+                "chat_template_kwargs": {
+                    "enable_thinking": llm_config.enable_thinking
+                }
+            }
+
         # Create retry decorator with config
         self._chat_with_retry = self._create_retry_wrapper()
 
@@ -52,19 +61,17 @@ class LLMClient:
             reraise=True,
         )
         def _chat(messages: List[Dict[str, str]]) -> str:
-            # Build request parameters
-            params = {
+            kwargs = {
                 "model": self.config.model,
                 "messages": messages,
                 "temperature": self.config.temperature,
                 "max_tokens": self.config.max_tokens,
             }
-            # Add model-specific extra parameters via extra_body
-            # (for non-standard params like vLLM's enable_thinking)
-            if self.config.extra_params:
-                params["extra_body"] = self.config.extra_params
+            # Add extra_body for vLLM (Qwen3 thinking mode)
+            if self.extra_body:
+                kwargs["extra_body"] = self.extra_body
 
-            response = self.client.chat.completions.create(**params)
+            response = self.client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
 
         return _chat
