@@ -44,7 +44,7 @@ memory:
   mode: "retrieve_and_extract" # baseline | retrieve_only | retrieve_and_extract
 
   # Storage configuration
-  memory_dir: "qwen2.5-7b-memory_banks"
+  memory_dir: "memory_banks"
   task_name: "alfworld"
 
   # Embedding model configuration

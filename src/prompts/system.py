@@ -41,7 +41,7 @@ Utility:
   - check valid actions            : List all currently valid actions
 
 ==================================================
-OUTPUT FORMAT (REQUIRED)
+OUTPUT FORMAT
 ==================================================
 You MUST respond in EXACTLY this format:
 
@@ -89,28 +89,15 @@ def _format_trajectory_for_memory(trajectory: List[dict]) -> str:
         trajectory: List of action-observation pairs.
         
     Returns:
-        Formatted trajectory string (abbreviated).
+        Formatted trajectory string (complete, no truncation).
     """
     if not trajectory:
         return "(empty)"
     
-    # Show abbreviated trajectory (first few and last few steps)
-    max_show = 6
     lines = []
-    
-    if len(trajectory) <= max_show:
-        for step in trajectory:
-            action = step.get("action", "")
-            lines.append(f"  > {action}")
-    else:
-        # Show first 3 and last 3
-        for step in trajectory[:3]:
-            action = step.get("action", "")
-            lines.append(f"  > {action}")
-        lines.append(f"  ... ({len(trajectory) - 6} more steps) ...")
-        for step in trajectory[-3:]:
-            action = step.get("action", "")
-            lines.append(f"  > {action}")
+    for i, step in enumerate(trajectory, 1):
+        action = step.get("action", "")
+        lines.append(f"  Step {i}: {action}")
     
     return "\n".join(lines)
 
@@ -122,7 +109,7 @@ def _format_memory_items(memory_items: List) -> str:
         memory_items: List of MemoryEntry objects.
         
     Returns:
-        Formatted memory items string.
+        Formatted memory items string (complete, no truncation).
     """
     if not memory_items:
         return ""
@@ -131,9 +118,7 @@ def _format_memory_items(memory_items: List) -> str:
     for item in memory_items:
         lines.append(f"    - {item.title}: {item.description}")
         if item.content:
-            # Truncate long content
-            content = item.content[:200] + "..." if len(item.content) > 200 else item.content
-            lines.append(f"      {content}")
+            lines.append(f"      {item.content}")
     
     return "\n".join(lines)
 
