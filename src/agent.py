@@ -64,7 +64,7 @@ class ReActAgent:
         retrieved_memories: Optional[List["RetrievedMemory"]] = None,
     ):
         """Initialize ReAct agent.
-        
+
         Args:
             llm_client: LLM client for generating responses.
             use_few_shot: Whether to include few-shot examples.
@@ -76,7 +76,7 @@ class ReActAgent:
         self.history_length = history_length
         self.debug = debug
         self.retrieved_memories = retrieved_memories or []
-        
+
         # Build system prompt with optional memories
         self.system_prompt = get_system_prompt_with_memory(
             use_few_shot=use_few_shot,
@@ -149,12 +149,14 @@ class ReActAgent:
         result.observations.append(current_obs)
 
         if self.debug:
-            memory_section = build_memory_section(self.retrieved_memories) if self.retrieved_memories else ""
+            memory_section = build_memory_section(
+                self.retrieved_memories) if self.retrieved_memories else ""
             log_game_start(info["game_id"], task_description, memory_section)
             print(f"\n{Colors.info('Game:')} {info['game_id']}")
             print(f"{Colors.dim('Goal:')} {task_description}")
             if self.retrieved_memories:
-                print(f"{Colors.dim('Using')} {Colors.info(str(len(self.retrieved_memories)))} {Colors.dim('retrieved memories')}")
+                print(
+                    f"{Colors.dim('Using')} {Colors.info(str(len(self.retrieved_memories)))} {Colors.dim('retrieved memories')}")
 
         try:
             for step in range(max_steps):

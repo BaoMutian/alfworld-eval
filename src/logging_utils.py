@@ -167,7 +167,7 @@ def log_step_interaction(
 
 def log_llm_call(context: str, system_prompt: str, user_prompt: str, response: str) -> None:
     """Log a generic LLM call (for memory extraction, etc.).
-    
+
     Args:
         context: Description of the call (e.g., "Memory Extraction")
         system_prompt: System prompt used
