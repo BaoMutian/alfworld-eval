@@ -10,10 +10,10 @@ from typing import List, Set, Optional
 from tqdm import tqdm
 
 from .config import Config
-from .llm_client import LLMClient, set_llm_log_callback
+from .llm_client import LLMClient
 from .environment import AlfWorldEnv, get_game_id_from_path, get_task_type_from_path
 from .agent import GameResult, ReActAgent
-from .prompts import extract_task_description
+from .prompts import get_system_prompt, extract_task_description
 from .utils import (
     game_result_to_dict,
     compute_summary,
@@ -25,7 +25,7 @@ from .utils import (
 from .logging_utils import (
     Colors,
     setup_logging,
-    log_llm_call,
+    log_system_prompt,
     format_progress,
     format_game_result,
 )
@@ -93,8 +93,6 @@ class Evaluator:
 
         if config.runtime.debug:
             setup_logging(debug=True, log_file=str(self.debug_log_path))
-            # Set LLM logging callback
-            set_llm_log_callback(log_llm_call)
 
         # Initialize memory components if enabled
         self.memory_store = None
@@ -384,6 +382,9 @@ class Evaluator:
         print(Colors.highlight("=" * 60))
         print()
 
+        if self.config.runtime.debug:
+            log_system_prompt(get_system_prompt(
+                self.config.prompt.use_few_shot))
 
         self._load_checkpoint()
 

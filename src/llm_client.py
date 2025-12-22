@@ -1,7 +1,7 @@
 """LLM client with retry mechanism for OpenAI-compatible APIs."""
 
 import logging
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict
 
 from openai import OpenAI
 from tenacity import (
@@ -15,19 +15,6 @@ from tenacity import (
 from .config import LLMConfig, RetryConfig
 
 logger = logging.getLogger(__name__)
-
-# Global log callback for LLM calls
-_llm_log_callback: Optional[Callable[[str, str, str, str], None]] = None
-
-
-def set_llm_log_callback(callback: Optional[Callable[[str, str, str, str], None]]) -> None:
-    """Set callback for logging LLM calls.
-    
-    Args:
-        callback: Function(context, system_prompt, user_prompt, response) or None.
-    """
-    global _llm_log_callback
-    _llm_log_callback = callback
 
 
 class LLMClient:
@@ -95,18 +82,12 @@ class LLMClient:
                 f"LLM request failed after {self.retry_config.max_retries} retries: {e}")
             raise
 
-    def chat_simple(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        context: str = "LLM Call",
-    ) -> str:
+    def chat_simple(self, system_prompt: str, user_prompt: str) -> str:
         """Simple chat interface with system and user prompts.
 
         Args:
             system_prompt: System prompt content.
             user_prompt: User prompt content.
-            context: Context description for logging.
 
         Returns:
             Model response content.
@@ -115,10 +96,4 @@ class LLMClient:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-        response = self.chat(messages)
-        
-        # Log if callback is set
-        if _llm_log_callback:
-            _llm_log_callback(context, system_prompt, user_prompt, response)
-        
-        return response
+        return self.chat(messages)

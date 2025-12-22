@@ -104,50 +104,41 @@ def _log_debug(message: str) -> None:
         _debug_file_logger.debug(message)
 
 
-def log_llm_call(
-    context: str,
-    system_prompt: str,
-    user_prompt: str,
-    response: str,
-) -> None:
-    """Log a single LLM call with prompt and response.
-    
-    Args:
-        context: Description of the call context (e.g., "Agent Step 1", "Memory Extract").
-        system_prompt: System prompt sent to LLM.
-        user_prompt: User prompt sent to LLM.
-        response: LLM response.
-    """
-    _log_debug("")
-    _log_debug(f"{'='*60} [{context}] {'='*60}")
-    _log_debug("")
-    _log_debug("[SYSTEM PROMPT]")
-    _log_debug(system_prompt)
-    _log_debug("")
-    _log_debug("[USER PROMPT]")
-    _log_debug(user_prompt)
-    _log_debug("")
-    _log_debug("[LLM RESPONSE]")
-    _log_debug(response)
-    _log_debug("")
-
+# ============================================================================
+# Debug Log Functions - Only prompts and LLM responses
+# ============================================================================
 
 def log_system_prompt(system_prompt: str) -> None:
-    """Log the system prompt once at the beginning (deprecated, use log_llm_call)."""
-    pass  # No longer needed, system prompt logged with each LLM call
+    """Log the system prompt once at the beginning."""
+    _log_debug("=" * 80)
+    _log_debug("SYSTEM PROMPT")
+    _log_debug("=" * 80)
+    _log_debug("")
+    _log_debug(system_prompt)
+    _log_debug("")
+    _log_debug("=" * 80)
+    _log_debug("")
 
 
-def log_game_start(game_id: str, goal: str) -> None:
+def log_game_start(game_id: str, goal: str, memory_section: str = "") -> None:
     """Log the start of a game."""
     _log_debug("")
-    _log_debug(f"### GAME: {game_id}")
-    _log_debug(f"### GOAL: {goal}")
+    _log_debug("=" * 80)
+    _log_debug(f"GAME: {game_id}")
+    _log_debug(f"GOAL: {goal}")
+    if memory_section:
+        _log_debug("")
+        _log_debug("RETRIEVED MEMORIES (appended to system prompt):")
+        _log_debug(memory_section)
+    _log_debug("=" * 80)
 
 
 def log_game_end(game_id: str, success: bool, steps: int) -> None:
     """Log the end of a game."""
     status = "SUCCESS" if success else "FAILED"
-    _log_debug(f"### RESULT: {status} ({steps} steps)")
+    _log_debug("")
+    _log_debug(f">>> RESULT: {status} ({steps} steps)")
+    _log_debug("=" * 80)
     _log_debug("")
 
 
@@ -158,9 +149,49 @@ def log_step_interaction(
     action: str,
     observation: str,
 ) -> None:
-    """Log a step interaction (deprecated, use log_llm_call instead)."""
-    pass  # No longer used, LLM calls logged via log_llm_call
+    """Log agent step interaction (user prompt + LLM response)."""
+    _log_debug("")
+    _log_debug("-" * 40)
+    _log_debug(f"[Agent Step {step}]")
+    _log_debug("-" * 40)
+    _log_debug("")
+    _log_debug("USER PROMPT:")
+    _log_debug(user_prompt)
+    _log_debug("")
+    _log_debug("LLM RESPONSE:")
+    _log_debug(response)
+    _log_debug("")
+    _log_debug(f"-> Action: {action}")
+    _log_debug(f"-> Observation: {observation}")
 
+
+def log_llm_call(context: str, system_prompt: str, user_prompt: str, response: str) -> None:
+    """Log a generic LLM call (for memory extraction, etc.).
+    
+    Args:
+        context: Description of the call (e.g., "Memory Extraction")
+        system_prompt: System prompt used
+        user_prompt: User prompt used
+        response: LLM response
+    """
+    _log_debug("")
+    _log_debug("-" * 40)
+    _log_debug(f"[{context}]")
+    _log_debug("-" * 40)
+    _log_debug("")
+    _log_debug("SYSTEM PROMPT:")
+    _log_debug(system_prompt)
+    _log_debug("")
+    _log_debug("USER PROMPT:")
+    _log_debug(user_prompt)
+    _log_debug("")
+    _log_debug("LLM RESPONSE:")
+    _log_debug(response)
+
+
+# ============================================================================
+# Terminal Output Formatting
+# ============================================================================
 
 def format_step_info(step: int, action: str, observation: str, max_obs_len: int = 80) -> str:
     """Format step information for terminal display."""

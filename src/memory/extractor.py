@@ -9,6 +9,7 @@ from .prompts import (
     build_extraction_prompt,
     build_contrastive_extraction_prompt,
 )
+from ..logging_utils import log_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,7 @@ class MemoryExtractor:
 
         try:
             # Build extraction prompt
+            system_prompt = "You are an expert at analyzing task execution and extracting reusable strategies."
             prompt = build_extraction_prompt(
                 task_type=task_type,
                 goal=goal,
@@ -162,9 +164,17 @@ class MemoryExtractor:
 
             # Call LLM
             response = self.llm_client.chat_simple(
-                system_prompt="You are an expert at analyzing task execution and extracting reusable strategies.",
+                system_prompt=system_prompt,
                 user_prompt=prompt,
-                context=f"Memory Extract ({task_id})",
+            )
+
+            # Log LLM call
+            result_str = "SUCCESS" if is_success else "FAILED"
+            log_llm_call(
+                f"Memory Extraction ({result_str})",
+                system_prompt,
+                prompt,
+                response,
             )
 
             # Parse response
@@ -234,6 +244,7 @@ class MemoryExtractor:
 
         try:
             # Build contrastive extraction prompt
+            system_prompt = "You are an expert at analyzing task execution and extracting patterns from multiple attempts."
             prompt = build_contrastive_extraction_prompt(
                 task_type=task_type,
                 goal=goal,
@@ -242,9 +253,16 @@ class MemoryExtractor:
 
             # Call LLM
             response = self.llm_client.chat_simple(
-                system_prompt="You are an expert at analyzing task execution and extracting patterns from multiple attempts.",
+                system_prompt=system_prompt,
                 user_prompt=prompt,
-                context=f"Memory Extract Contrastive ({task_id})",
+            )
+
+            # Log LLM call
+            log_llm_call(
+                f"Contrastive Extraction ({len(trajectories)} trajectories)",
+                system_prompt,
+                prompt,
+                response,
             )
 
             # Parse response

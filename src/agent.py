@@ -6,16 +6,18 @@ from dataclasses import dataclass, field
 from typing import List, Tuple, Optional, Dict, Any, TYPE_CHECKING
 
 from .llm_client import LLMClient
-from .environment import AlfWorldEnv, get_game_id_from_path, get_task_type_from_path
+from .environment import AlfWorldEnv
 from .prompts import (
     get_system_prompt_with_memory,
     build_user_prompt,
+    build_memory_section,
     extract_task_description,
 )
 from .logging_utils import (
     Colors,
     log_game_start,
     log_game_end,
+    log_step_interaction,
     format_step_info,
 )
 
@@ -147,7 +149,8 @@ class ReActAgent:
         result.observations.append(current_obs)
 
         if self.debug:
-            log_game_start(info["game_id"], task_description)
+            memory_section = build_memory_section(self.retrieved_memories) if self.retrieved_memories else ""
+            log_game_start(info["game_id"], task_description, memory_section)
             print(f"\n{Colors.info('Game:')} {info['game_id']}")
             print(f"{Colors.dim('Goal:')} {task_description}")
             if self.retrieved_memories:
@@ -165,7 +168,6 @@ class ReActAgent:
                 response = self.llm_client.chat_simple(
                     system_prompt=self.system_prompt,
                     user_prompt=user_prompt,
-                    context=f"Agent Step {step + 1}",
                 )
 
                 thought, action = self.parse_response(response)
@@ -176,6 +178,8 @@ class ReActAgent:
                 result.observations.append(obs)
 
                 if self.debug:
+                    log_step_interaction(
+                        step + 1, user_prompt, response, action, obs)
                     print(format_step_info(step + 1, action, obs))
 
                 history.append((action, obs))
@@ -201,61 +205,3 @@ class ReActAgent:
             log_game_end(info["game_id"], result.success, result.steps)
 
         return result
-
-
-def run_single_game(
-    alfworld_data_path: str,
-    game_file: str,
-    llm_client: LLMClient,
-    use_few_shot: bool = True,
-    history_length: int = 10,
-    max_steps: int = 30,
-    debug: bool = False,
-    retrieved_memories: Optional[List["RetrievedMemory"]] = None,
-) -> GameResult:
-    """Run a single game from scratch.
-    
-    Args:
-        alfworld_data_path: Path to ALFWorld data directory.
-        game_file: Path to game file.
-        llm_client: LLM client for generating responses.
-        use_few_shot: Whether to include few-shot examples.
-        history_length: Number of history entries to include.
-        max_steps: Maximum steps per game.
-        debug: Whether to enable debug logging.
-        retrieved_memories: Optional list of retrieved memories to use.
-        
-    Returns:
-        GameResult with execution results.
-    """
-    env = None
-    try:
-        env = AlfWorldEnv(alfworld_data_path)
-        obs, info = env.reset(game_file)
-
-        agent = ReActAgent(
-            llm_client=llm_client,
-            use_few_shot=use_few_shot,
-            history_length=history_length,
-            debug=debug,
-            retrieved_memories=retrieved_memories,
-        )
-
-        return agent.run_game(env, obs, info, max_steps=max_steps)
-
-    except Exception as e:
-        logger.error(f"Error running game {game_file}: {e}")
-        task_type_id, task_type = get_task_type_from_path(game_file)
-        return GameResult(
-            game_id=get_game_id_from_path(game_file),
-            game_file=game_file,
-            task_type=task_type,
-            task_type_id=task_type_id,
-            success=False,
-            steps=0,
-            goal="",
-            error=str(e),
-        )
-    finally:
-        if env:
-            env.close()
