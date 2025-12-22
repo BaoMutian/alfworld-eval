@@ -165,9 +165,7 @@ class ReActAgent:
                 response = self.llm_client.chat_simple(
                     system_prompt=self.system_prompt,
                     user_prompt=user_prompt,
-                    context="Agent Step",
-                    step=step + 1,
-                    game_id=info["game_id"],
+                    context=f"Agent Step {step + 1}",
                 )
 
                 thought, action = self.parse_response(response)

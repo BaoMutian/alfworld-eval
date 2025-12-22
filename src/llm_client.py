@@ -16,15 +16,15 @@ from .config import LLMConfig, RetryConfig
 
 logger = logging.getLogger(__name__)
 
-# Optional callback for logging LLM interactions
-_llm_log_callback: Optional[Callable] = None
+# Global log callback for LLM calls
+_llm_log_callback: Optional[Callable[[str, str, str, str], None]] = None
 
 
-def set_llm_log_callback(callback: Optional[Callable]) -> None:
-    """Set callback for logging LLM interactions.
+def set_llm_log_callback(callback: Optional[Callable[[str, str, str, str], None]]) -> None:
+    """Set callback for logging LLM calls.
     
     Args:
-        callback: Function(context, system_prompt, user_prompt, response, **kwargs)
+        callback: Function(context, system_prompt, user_prompt, response) or None.
     """
     global _llm_log_callback
     _llm_log_callback = callback
@@ -51,11 +51,6 @@ class LLMClient:
 
         # Create retry decorator with config
         self._chat_with_retry = self._create_retry_wrapper()
-        
-        # Context for logging
-        self._current_context: str = "LLM Call"
-        self._current_step: Optional[int] = None
-        self._current_game_id: Optional[str] = None
 
     def _create_retry_wrapper(self):
         """Create a retry-wrapped chat completion function."""
@@ -79,23 +74,6 @@ class LLMClient:
             return response.choices[0].message.content
 
         return _chat
-
-    def set_context(
-        self,
-        context: str = "LLM Call",
-        step: Optional[int] = None,
-        game_id: Optional[str] = None,
-    ) -> None:
-        """Set context for logging.
-        
-        Args:
-            context: Context label for this call
-            step: Optional step number
-            game_id: Optional game ID
-        """
-        self._current_context = context
-        self._current_step = step
-        self._current_game_id = game_id
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
         """Send chat completion request with retry.
@@ -121,18 +99,14 @@ class LLMClient:
         self,
         system_prompt: str,
         user_prompt: str,
-        context: Optional[str] = None,
-        step: Optional[int] = None,
-        game_id: Optional[str] = None,
+        context: str = "LLM Call",
     ) -> str:
         """Simple chat interface with system and user prompts.
 
         Args:
             system_prompt: System prompt content.
             user_prompt: User prompt content.
-            context: Optional context label for logging.
-            step: Optional step number for logging.
-            game_id: Optional game ID for logging.
+            context: Context description for logging.
 
         Returns:
             Model response content.
@@ -141,22 +115,10 @@ class LLMClient:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-        
         response = self.chat(messages)
         
-        # Log the interaction if callback is set
+        # Log if callback is set
         if _llm_log_callback:
-            ctx = context if context else self._current_context
-            stp = step if step is not None else self._current_step
-            gid = game_id if game_id else self._current_game_id
-            
-            _llm_log_callback(
-                context=ctx,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                response=response,
-                step=stp,
-                game_id=gid,
-            )
+            _llm_log_callback(context, system_prompt, user_prompt, response)
         
         return response
