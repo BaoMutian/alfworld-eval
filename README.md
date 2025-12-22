@@ -1,6 +1,6 @@
 # ALFWorld LLM Agent Evaluation
 
-基于 ALFWorld 环境的 LLM Agent 评测框架，使用 ReAct 风格的 prompt 测试大语言模型在多轮交互家居任务中的表现。
+基于 ALFWorld 环境的 LLM Agent 评测框架，使用 ReAct 风格的 prompt 测试大语言模型在多轮交互家居任务中的表现。支持 Memory 系统实现自主学习与经验复用。
 
 ## 快速开始
 
@@ -80,7 +80,32 @@ runtime:
   save_interval: 1         # 保存间隔
   output_dir: "results"    # 输出目录
   debug: false             # 调试模式
+
+# Memory 系统配置
+memory:
+  enabled: false           # 是否启用 Memory
+  mode: "baseline"         # baseline | retrieve_only | retrieve_and_extract
+  memory_dir: "memory_banks"
+  embedding_model: "BAAI/bge-base-en-v1.5"
+  top_k: 1                 # 检索数量
+  similarity_threshold: 0.5
 ```
+
+## Memory 系统
+
+支持三种模式：
+
+| 模式 | 说明 |
+|------|------|
+| `baseline` | 无 Memory，纯 LLM 推理 |
+| `retrieve_only` | 仅检索相似经验辅助推理 |
+| `retrieve_and_extract` | 检索 + 自动提取新经验 |
+
+Memory 系统会：
+- 使用 embedding 模型编码任务目标
+- 检索语义相似的历史经验
+- 将成功/失败经验注入 System Prompt
+- 自动从执行轨迹提取可复用策略
 
 ## 任务类型
 
@@ -114,7 +139,8 @@ runtime:
       "success": true,
       "steps": 8,
       "actions": [...],
-      "observations": [...]
+      "observations": [...],
+      "used_memories": [...]
     }
   ]
 }
@@ -134,11 +160,18 @@ alfworld-eval/
 │   ├── llm_client.py     # LLM客户端
 │   ├── logging_utils.py  # 日志工具
 │   ├── utils.py          # 数据处理工具
-│   └── prompts/
-│       ├── system.py     # System Prompt
-│       └── few_shot.py   # Few-shot示例
+│   ├── prompts/
+│   │   ├── system.py     # System Prompt
+│   │   └── few_shot.py   # Few-shot示例
+│   └── memory/           # Memory 系统
+│       ├── schemas.py    # 数据结构
+│       ├── store.py      # 存储管理
+│       ├── retriever.py  # 检索器
+│       ├── extractor.py  # 提取器
+│       └── embeddings.py # Embedding模型
 ├── run_eval.py           # 入口脚本
-└── results/              # 评测结果
+├── results/              # 评测结果
+└── memory_banks/         # Memory 存储
 ```
 
 ## 特性
@@ -148,6 +181,7 @@ alfworld-eval/
 - **check valid actions**：Agent 可查询当前可执行动作
 - **彩色输出**：实时显示进度和成功率
 - **Debug 模式**：记录完整 prompt/response 交互日志
+- **Memory 系统**：自主学习，经验复用
 
 ## 评估指标
 
@@ -156,4 +190,3 @@ alfworld-eval/
 | Success Rate | 成功完成任务的比例 |
 | Avg Steps | 完成任务的平均步数 |
 | Success Avg Steps | 成功任务的平均步数 |
-

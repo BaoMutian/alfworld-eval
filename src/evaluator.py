@@ -11,8 +11,8 @@ from tqdm import tqdm
 
 from .config import Config
 from .llm_client import LLMClient
-from .environment import AlfWorldEnv, get_game_id_from_path
-from .agent import GameResult, run_single_game
+from .environment import AlfWorldEnv, get_game_id_from_path, get_task_type_from_path
+from .agent import GameResult, ReActAgent
 from .prompts import get_system_prompt, extract_task_description
 from .utils import (
     game_result_to_dict,
@@ -213,11 +213,11 @@ class Evaluator:
 
         return game_files
 
-    def _retrieve_memories(self, game_file: str) -> list:
-        """Retrieve relevant memories for a game.
+    def _retrieve_memories(self, goal: str) -> list:
+        """Retrieve relevant memories for a task goal.
         
         Args:
-            game_file: Path to game file.
+            goal: Task goal description.
             
         Returns:
             List of RetrievedMemory objects.
@@ -226,15 +226,6 @@ class Evaluator:
             return []
 
         try:
-            # Need to get the task goal from the game
-            # Create a temporary env to get initial observation
-            env = AlfWorldEnv(self.config.data.alfworld_data_path)
-            try:
-                obs, _ = env.reset(game_file)
-                goal = extract_task_description(obs)
-            finally:
-                env.close()
-
             # Retrieve memories
             retrieved = self.memory_retriever.retrieve(goal)
             
@@ -312,26 +303,50 @@ class Evaluator:
 
     def _run_game(self, game_file: str) -> GameResult:
         """Run a single game with optional memory support."""
-        # Retrieve relevant memories
-        retrieved_memories = self._retrieve_memories(game_file)
-
-        # Run game
-        result = run_single_game(
-            alfworld_data_path=self.config.data.alfworld_data_path,
-            game_file=game_file,
-            llm_client=self.llm_client,
-            use_few_shot=self.config.prompt.use_few_shot,
-            history_length=self.config.prompt.history_length,
-            max_steps=self.config.test.max_steps,
-            debug=self.config.runtime.debug,
-            retrieved_memories=retrieved_memories,
-        )
-
-        # Extract and store memory if enabled
-        if self.config.memory.should_extract():
-            self._extract_and_store_memory(result)
-
-        return result
+        env = None
+        try:
+            # Create environment and get initial state
+            env = AlfWorldEnv(self.config.data.alfworld_data_path)
+            obs, info = env.reset(game_file)
+            goal = extract_task_description(obs)
+            
+            # Retrieve relevant memories using the goal
+            retrieved_memories = self._retrieve_memories(goal)
+            
+            # Create agent
+            agent = ReActAgent(
+                llm_client=self.llm_client,
+                use_few_shot=self.config.prompt.use_few_shot,
+                history_length=self.config.prompt.history_length,
+                debug=self.config.runtime.debug,
+                retrieved_memories=retrieved_memories,
+            )
+            
+            # Run game with existing environment
+            result = agent.run_game(env, obs, info, max_steps=self.config.test.max_steps)
+            
+            # Extract and store memory if enabled
+            if self.config.memory.should_extract():
+                self._extract_and_store_memory(result)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error running game {game_file}: {e}")
+            task_type_id, task_type = get_task_type_from_path(game_file)
+            return GameResult(
+                game_id=get_game_id_from_path(game_file),
+                game_file=game_file,
+                task_type=task_type,
+                task_type_id=task_type_id,
+                success=False,
+                steps=0,
+                goal="",
+                error=str(e),
+            )
+        finally:
+            if env:
+                env.close()
 
     def run(self) -> None:
         """Run the evaluation."""

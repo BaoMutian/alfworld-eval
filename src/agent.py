@@ -8,7 +8,6 @@ from typing import List, Tuple, Optional, Dict, Any, TYPE_CHECKING
 from .llm_client import LLMClient
 from .environment import AlfWorldEnv, get_game_id_from_path, get_task_type_from_path
 from .prompts import (
-    get_system_prompt,
     get_system_prompt_with_memory,
     build_user_prompt,
     extract_task_description,

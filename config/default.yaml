@@ -4,7 +4,7 @@
 llm:
   api_base_url: "https://openrouter.ai/api/v1"
   api_key: "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"
-  model: "qwen/qwen-2.5-72b-instruct"
+  model: "qwen/qwen-2.5-7b-instruct"
   temperature: 0.3
   max_tokens: 1024
   timeout: 60
@@ -17,7 +17,7 @@ retry:
 
 # Test Configuration
 test:
-  num_games: 2
+  num_games: 3
   task_types: null # null means all types, or list like [1, 2, 3, 4, 5, 6]
   split: "valid_seen"
   seed: 42
@@ -44,7 +44,7 @@ memory:
   mode: "retrieve_and_extract" # baseline | retrieve_only | retrieve_and_extract
 
   # Storage configuration
-  memory_dir: "memory_banks"
+  memory_dir: "qwen2.5-7b-memory_banks"
   task_name: "alfworld"
 
   # Embedding model configuration
