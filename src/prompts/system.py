@@ -84,57 +84,70 @@ def get_system_prompt(use_few_shot: bool = True) -> str:
 
 def _format_trajectory_for_memory(trajectory: List[dict]) -> str:
     """Format trajectory for memory display.
-    
+
     Args:
         trajectory: List of action-observation pairs.
-        
+
     Returns:
-        Formatted trajectory string (complete, no truncation).
+        Formatted trajectory string (abbreviated).
     """
     if not trajectory:
         return "(empty)"
-    
+
+    # Show abbreviated trajectory (first few and last few steps)
+    max_show = 6
     lines = []
-    for i, step in enumerate(trajectory, 1):
-        action = step.get("action", "")
-        lines.append(f"  Step {i}: {action}")
-    
+
+    if len(trajectory) <= max_show:
+        for step in trajectory:
+            action = step.get("action", "")
+            lines.append(f"  > {action}")
+    else:
+        # Show first 3 and last 3
+        for step in trajectory[:3]:
+            action = step.get("action", "")
+            lines.append(f"  > {action}")
+        lines.append(f"  ... ({len(trajectory) - 6} more steps) ...")
+        for step in trajectory[-3:]:
+            action = step.get("action", "")
+            lines.append(f"  > {action}")
+
     return "\n".join(lines)
 
 
 def _format_memory_items(memory_items: List) -> str:
     """Format memory items for display.
-    
+
     Args:
         memory_items: List of MemoryEntry objects.
-        
+
     Returns:
-        Formatted memory items string (complete, no truncation).
+        Formatted memory items string.
     """
     if not memory_items:
         return ""
-    
+
     lines = ["  Key Insights:"]
     for item in memory_items:
         lines.append(f"    - {item.title}: {item.description}")
         if item.content:
             lines.append(f"      {item.content}")
-    
+
     return "\n".join(lines)
 
 
 def build_memory_section(retrieved_memories: List["RetrievedMemory"]) -> str:
     """Build the memory section for system prompt.
-    
+
     Args:
         retrieved_memories: List of RetrievedMemory objects.
-        
+
     Returns:
         Formatted memory section string.
     """
     if not retrieved_memories:
         return ""
-    
+
     parts = [
         "",
         "==================================================",
@@ -144,22 +157,23 @@ def build_memory_section(retrieved_memories: List["RetrievedMemory"]) -> str:
         "Use them as reference when relevant, but adapt to the specific situation.",
         "",
     ]
-    
+
     for i, rm in enumerate(retrieved_memories, 1):
         result_str = "SUCCESS" if rm.is_success else "FAILED"
-        parts.append(f"[Experience #{i}] (Similarity: {rm.similarity:.2f}, Result: {result_str})")
+        parts.append(
+            f"[Experience #{i}] (Similarity: {rm.similarity:.2f}, Result: {result_str})")
         parts.append(f"  Goal: {rm.query}")
-        
+
         # Add trajectory summary
         parts.append(f"  Actions taken:")
         parts.append(_format_trajectory_for_memory(rm.trajectory))
-        
+
         # Add memory items (extracted insights)
         if rm.memory_items:
             parts.append(_format_memory_items(rm.memory_items))
-        
+
         parts.append("")
-    
+
     return "\n".join(parts)
 
 
@@ -177,16 +191,16 @@ def get_system_prompt_with_memory(
         System prompt string.
     """
     base_prompt = get_system_prompt(use_few_shot)
-    
+
     if not retrieved_memories:
         return base_prompt
-    
+
     memory_section = build_memory_section(retrieved_memories)
-    
+
     # Insert memory section before OUTPUT FORMAT section
     # Find the position to insert
     output_format_marker = "==================================================\nOUTPUT FORMAT"
-    
+
     if output_format_marker in base_prompt:
         idx = base_prompt.find(output_format_marker)
         return base_prompt[:idx] + memory_section + "\n" + base_prompt[idx:]
