@@ -2,9 +2,36 @@
 
 from typing import List, Dict
 
+# Environment context for memory extraction
+ENVIRONMENT_CONTEXT = """## Environment Background (ALFWorld)
+ALFWorld is a text-based household environment where an agent must complete tasks by navigating rooms and interacting with objects.
+
+**Key Rules:**
+- Agent can only carry ONE object at a time
+- Objects have numbered names (e.g., "apple 1", "fridge 1")
+- Some receptacles (fridge, cabinet) need to be opened before accessing contents
+
+**Available Commands:**
+- Navigation: look, go to [receptacle]
+- Object: take [object] from [receptacle], move [object] to [receptacle]
+- Container: open [receptacle], close [receptacle]
+- Processing: heat/cool/clean [object] with [receptacle], use [object]
+- Utility: inventory, examine [object]
+
+**Task Types:**
+1. pick_and_place_simple: Find an object and place it somewhere
+2. look_at_obj_in_light: Examine an object under a light source
+3. pick_clean_then_place: Clean an object and place it
+4. pick_heat_then_place: Heat an object and place it
+5. pick_cool_then_place: Cool an object and place it
+6. pick_two_obj_and_place: Find two objects and place them
+
+"""
+
 # Prompt for extracting strategies from successful trajectories
 EXTRACTION_PROMPT_SUCCESS = """You are an expert at analyzing task execution trajectories and extracting reusable reasoning strategies.
 
+{environment_context}
 ## Task Context
 - Task Type: {task_type}
 - Task Goal: {goal}
@@ -16,7 +43,7 @@ EXTRACTION_PROMPT_SUCCESS = """You are an expert at analyzing task execution tra
 ## Instructions
 Analyze this SUCCESSFUL trajectory and extract 1-3 reusable strategies that contributed to success.
 For each strategy, provide:
-1. **title**: A short, descriptive name (e.g., "Systematic Object Search", "Temperature-First Approach")
+1. **title**: A short, descriptive name (e.g., "Systematic Object Search", "Check Container Before Taking")
 2. **description**: A one-sentence summary of when this strategy applies
 3. **content**: Detailed actionable insight on the technique or logic
 
@@ -24,6 +51,7 @@ Focus on:
 - Key decision points that led to success
 - Efficient patterns or shortcuts discovered
 - General principles that could apply to similar tasks
+- How environment rules were leveraged effectively
 
 ## Output Format
 Return a JSON array of strategy objects:
@@ -42,6 +70,7 @@ Output ONLY the JSON array, no additional text."""
 # Prompt for extracting lessons from failed trajectories
 EXTRACTION_PROMPT_FAILURE = """You are an expert at analyzing task execution trajectories and extracting lessons from failures.
 
+{environment_context}
 ## Task Context
 - Task Type: {task_type}
 - Task Goal: {goal}
@@ -61,6 +90,7 @@ Focus on:
 - Critical mistakes or wrong assumptions
 - Inefficient patterns that wasted steps
 - Missing checks or validations that should have been done
+- How environment rules were violated or misunderstood
 
 ## Output Format
 Return a JSON array of lesson objects:
@@ -79,6 +109,7 @@ Output ONLY the JSON array, no additional text."""
 # Prompt for contrastive extraction (MaTTS)
 EXTRACTION_PROMPT_CONTRASTIVE = """You are an expert at analyzing multiple task execution trajectories and extracting consistent patterns.
 
+{environment_context}
 ## Task Context
 - Task Type: {task_type}
 - Task Goal: {goal}
@@ -97,6 +128,7 @@ Extract 1-3 high-quality strategies/lessons that:
 - Are consistent across multiple attempts (not coincidental)
 - Represent general patterns, not task-specific details
 - Could help with similar future tasks
+- Reflect understanding of environment rules and constraints
 
 ## Output Format
 Return a JSON array:
@@ -174,6 +206,7 @@ def build_extraction_prompt(
     formatted_trajectory = format_trajectory(trajectory)
     
     return template.format(
+        environment_context=ENVIRONMENT_CONTEXT,
         task_type=task_type,
         goal=goal,
         trajectory=formatted_trajectory,
@@ -198,9 +231,9 @@ def build_contrastive_extraction_prompt(
     formatted_trajectories = format_multiple_trajectories(trajectories)
     
     return EXTRACTION_PROMPT_CONTRASTIVE.format(
+        environment_context=ENVIRONMENT_CONTEXT,
         task_type=task_type,
         goal=goal,
         num_trajectories=len(trajectories),
         trajectories=formatted_trajectories,
     )
-
