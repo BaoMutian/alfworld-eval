@@ -59,9 +59,10 @@ class LLMClient:
                 "temperature": self.config.temperature,
                 "max_tokens": self.config.max_tokens,
             }
-            # Add model-specific extra parameters
+            # Add model-specific extra parameters via extra_body
+            # (for non-standard params like vLLM's enable_thinking)
             if self.config.extra_params:
-                params.update(self.config.extra_params)
+                params["extra_body"] = self.config.extra_params
 
             response = self.client.chat.completions.create(**params)
             return response.choices[0].message.content

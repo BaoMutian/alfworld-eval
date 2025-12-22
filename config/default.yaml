@@ -8,16 +8,18 @@ llm:
   temperature: 0.3
   max_tokens: 1024
   timeout: 60
-  # Model-specific extra parameters (passed directly to API)
+  # Model-specific extra parameters (passed via extra_body to API)
+  # Used for non-standard parameters like vLLM's enable_thinking
   #
-  # Qwen3 series (https://huggingface.co/Qwen/Qwen3-8B):
+  # Qwen3 + vLLM (https://huggingface.co/Qwen/Qwen3-8B):
   #   enable_thinking: true   # Enable thinking mode for complex reasoning
+  #   thinking_budget: 1024   # Max tokens for thinking (optional)
   #   # Recommended: temperature=0.6, top_p=0.95 for thinking mode
   #   # Recommended: temperature=0.7, top_p=0.8 for non-thinking mode
   #
   extra_params: {}
   # extra_params:
-  #   enable_thinking: false
+  #   enable_thinking: true
 
 # Retry Configuration
 retry:
@@ -31,7 +33,7 @@ test:
   task_types: null # null means all types, or list like [1, 2, 3, 4, 5, 6]
   split: "valid_seen"
   seed: 42
-  max_steps: 3
+  max_steps: 30
 
 # Prompt Configuration
 prompt:
