@@ -6,7 +6,7 @@ llm:
   api_key: "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"
   model: "qwen/qwen-2.5-72b-instruct"
   temperature: 0.3
-  max_tokens: 1024
+  max_tokens: 1024 # 0 表示不限制
   timeout: 60
   # Qwen3 thinking mode (for vLLM deployment): true/false/null(不设置)
   enable_thinking: null

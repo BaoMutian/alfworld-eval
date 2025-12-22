@@ -65,8 +65,11 @@ class LLMClient:
                 "model": self.config.model,
                 "messages": messages,
                 "temperature": self.config.temperature,
-                "max_tokens": self.config.max_tokens,
             }
+            # Only add max_tokens if it's positive (0 means no limit)
+            if self.config.max_tokens and self.config.max_tokens > 0:
+                kwargs["max_tokens"] = self.config.max_tokens
+
             # Add extra_body for vLLM (Qwen3 thinking mode)
             if self.extra_body:
                 kwargs["extra_body"] = self.extra_body
