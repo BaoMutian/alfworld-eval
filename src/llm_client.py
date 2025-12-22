@@ -3,6 +3,7 @@
 import logging
 from typing import List, Dict, Optional, Any
 
+import httpx
 from openai import OpenAI
 from tenacity import (
     retry,
@@ -30,10 +31,19 @@ class LLMClient:
         self.config = llm_config
         self.retry_config = retry_config
 
+        # Use httpx client for better compatibility with vLLM
+        http_client = httpx.Client(
+            transport=httpx.HTTPTransport(local_address="0.0.0.0"),
+            timeout=float(llm_config.timeout),
+        )
+
+        # Use "EMPTY" as api_key for local vLLM deployment if not set
+        api_key = llm_config.api_key if llm_config.api_key else "EMPTY"
+
         self.client = OpenAI(
-            api_key=llm_config.api_key,
+            api_key=api_key,
             base_url=llm_config.api_base_url,
-            timeout=llm_config.timeout,
+            http_client=http_client,
         )
 
         # Build extra_body for vLLM (Qwen3 thinking mode)

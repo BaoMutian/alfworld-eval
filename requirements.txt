@@ -5,6 +5,7 @@
 
 # LLM Client
 openai>=1.0.0
+httpx>=0.24.0
 
 # Configuration
 pyyaml>=6.0
