@@ -3,7 +3,7 @@
 from typing import List, Dict
 
 # Environment context for memory extraction
-ENVIRONMENT_CONTEXT = """## Environment Background (ALFWorld)
+ENVIRONMENT_CONTEXT = """## Environment Background
 ALFWorld is a text-based household environment where an agent must complete tasks by navigating rooms and interacting with objects.
 
 **Key Rules:**
@@ -25,13 +25,13 @@ ALFWorld is a text-based household environment where an agent must complete task
 4. pick_heat_then_place: Heat an object and place it
 5. pick_cool_then_place: Cool an object and place it
 6. pick_two_obj_and_place: Find two objects and place them
-
 """
 
 # Prompt for extracting strategies from successful trajectories
 EXTRACTION_PROMPT_SUCCESS = """You are an expert at analyzing task execution trajectories and extracting reusable reasoning strategies.
 
 {environment_context}
+
 ## Task Context
 - Task Type: {task_type}
 - Task Goal: {goal}
@@ -71,6 +71,7 @@ Output ONLY the JSON array, no additional text."""
 EXTRACTION_PROMPT_FAILURE = """You are an expert at analyzing task execution trajectories and extracting lessons from failures.
 
 {environment_context}
+
 ## Task Context
 - Task Type: {task_type}
 - Task Goal: {goal}
@@ -147,10 +148,10 @@ Output ONLY the JSON array, no additional text."""
 
 def format_trajectory(trajectory: List[Dict[str, str]]) -> str:
     """Format trajectory for prompt.
-    
+
     Args:
         trajectory: List of action-observation pairs.
-        
+
     Returns:
         Formatted trajectory string.
     """
@@ -169,10 +170,10 @@ def format_multiple_trajectories(
     trajectories: List[Dict],
 ) -> str:
     """Format multiple trajectories for contrastive extraction.
-    
+
     Args:
         trajectories: List of trajectory dicts with 'trajectory' and 'is_success' keys.
-        
+
     Returns:
         Formatted string with all trajectories.
     """
@@ -192,19 +193,19 @@ def build_extraction_prompt(
     is_success: bool,
 ) -> str:
     """Build extraction prompt for a single trajectory.
-    
+
     Args:
         task_type: Type of the task.
         goal: Task goal description.
         trajectory: List of action-observation pairs.
         is_success: Whether the task was successful.
-        
+
     Returns:
         Formatted prompt string.
     """
     template = EXTRACTION_PROMPT_SUCCESS if is_success else EXTRACTION_PROMPT_FAILURE
     formatted_trajectory = format_trajectory(trajectory)
-    
+
     return template.format(
         environment_context=ENVIRONMENT_CONTEXT,
         task_type=task_type,
@@ -219,17 +220,17 @@ def build_contrastive_extraction_prompt(
     trajectories: List[Dict],
 ) -> str:
     """Build extraction prompt for multiple trajectories (MaTTS).
-    
+
     Args:
         task_type: Type of the task.
         goal: Task goal description.
         trajectories: List of trajectory dicts.
-        
+
     Returns:
         Formatted prompt string.
     """
     formatted_trajectories = format_multiple_trajectories(trajectories)
-    
+
     return EXTRACTION_PROMPT_CONTRASTIVE.format(
         environment_context=ENVIRONMENT_CONTEXT,
         task_type=task_type,

@@ -17,6 +17,8 @@ class LLMConfig:
     temperature: float = 0.3
     max_tokens: int = 1024
     timeout: int = 60
+    # Model-specific extra parameters (e.g., enable_thinking for Qwen3)
+    extra_params: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -122,7 +124,11 @@ class Config:
         config = cls()
 
         if "llm" in data:
-            config.llm = LLMConfig(**data["llm"])
+            llm_data = data["llm"].copy()
+            # Ensure extra_params is a dict
+            if "extra_params" not in llm_data:
+                llm_data["extra_params"] = {}
+            config.llm = LLMConfig(**llm_data)
         if "retry" in data:
             config.retry = RetryConfig(**data["retry"])
         if "test" in data:
@@ -197,6 +203,7 @@ class Config:
                 "temperature": self.llm.temperature,
                 "max_tokens": self.llm.max_tokens,
                 "timeout": self.llm.timeout,
+                "extra_params": self.llm.extra_params,
             },
             "retry": {
                 "max_retries": self.retry.max_retries,

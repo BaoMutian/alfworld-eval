@@ -8,6 +8,11 @@ llm:
   temperature: 0.3
   max_tokens: 1024
   timeout: 60
+  # Model-specific extra parameters (passed directly to API)
+  # Examples:
+  #   Qwen3: enable_thinking: true/false
+  #   OpenAI: top_p, frequency_penalty, presence_penalty, etc.
+  extra_params: {}
 
 # Retry Configuration
 retry:
