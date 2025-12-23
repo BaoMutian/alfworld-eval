@@ -51,7 +51,7 @@ memory:
 
   # Embedding model configuration
   embedding_model: "BAAI/bge-base-en-v1.5"
-  embedding_device: "cpu"
+  embedding_device: "cuda:0"
 
   # Retrieval parameters
   top_k: 1

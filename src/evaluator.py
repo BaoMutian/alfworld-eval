@@ -38,19 +38,34 @@ logger = logging.getLogger(__name__)
 
 
 def generate_run_id(config: Config) -> str:
-    """Generate a stable run ID based on configuration."""
+    """Generate a stable run ID based on configuration.
+    
+    All parameters that affect evaluation results should be included in the hash
+    to ensure different configurations produce different run IDs.
+    """
     key_params = {
+        # LLM config
         "model": config.llm.model,
+        "temperature": config.llm.temperature,
+        # Test config
         "split": config.test.split,
         "task_types": sorted(config.test.task_types) if config.test.task_types else None,
         "num_games": config.test.num_games,
         "seed": config.test.seed,
         "max_steps": config.test.max_steps,
+        # Prompt config
         "use_few_shot": config.prompt.use_few_shot,
         "history_length": config.prompt.history_length,
-        # Include memory config in hash
+        # Memory config
         "memory_enabled": config.memory.enabled,
         "memory_mode": config.memory.mode,
+        # Retrieval parameters
+        "memory_top_k": config.memory.top_k,
+        "memory_similarity_threshold": config.memory.similarity_threshold,
+        # MaTTS config
+        "matts_enabled": config.memory.matts.enabled,
+        "matts_sample_n": config.memory.matts.sample_n if config.memory.matts.enabled else None,
+        "matts_temperature": config.memory.matts.temperature if config.memory.matts.enabled else None,
     }
 
     params_hash = hashlib.md5(
@@ -67,6 +82,9 @@ def generate_run_id(config: Config) -> str:
         mode_short = {"baseline": "base", "retrieve_only": "ret",
                       "retrieve_and_extract": "retex"}
         memory_suffix = f"_mem{mode_short.get(config.memory.mode, config.memory.mode[:3])}"
+        # Add MaTTS suffix if enabled
+        if config.memory.matts.enabled:
+            memory_suffix += "_matts"
 
     return f"{model_short}_{config.test.split}_{task_str}_{num_str}{memory_suffix}_{params_hash}"
 

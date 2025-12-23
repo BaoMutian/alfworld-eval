@@ -108,7 +108,7 @@ Return a JSON array of lesson objects:
 Output ONLY the JSON array, no additional text."""
 
 # System prompt for MaTTS contrastive extraction
-MATTS_SYSTEM_PROMPT = """You are an expert in household task navigation and execution analysis. You will be given a user query (task goal) and multiple trajectories showing how an agent attempted the same task. Some trajectories may be successful, and others may have failed.
+MATTS_SYSTEM_PROMPT = """You are an expert in household task navigation and execution analysis. You will be given a task goal and multiple trajectories showing how an agent attempted the same task. Some trajectories may be successful, and others may have failed.
 
 ## Guidelines
 Your goal is to compare and contrast these trajectories to identify the most useful and generalizable strategies as memory items.
