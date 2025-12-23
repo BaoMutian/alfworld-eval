@@ -9,7 +9,7 @@ from typing import List, Set, Optional
 
 from tqdm import tqdm
 
-from .config import Config
+from .config import Config, LLMConfig, RetryConfig
 from .llm_client import LLMClient
 from .environment import AlfWorldEnv, get_game_id_from_path, get_task_type_from_path
 from .agent import GameResult, ReActAgent
@@ -29,6 +29,9 @@ from .logging_utils import (
     format_progress,
     format_game_result,
 )
+
+# Type for trajectory data used in MaTTS
+TrajectoryData = dict  # Contains: trajectory, is_success, total_steps, initial_observation
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +101,7 @@ class Evaluator:
         self.memory_store = None
         self.memory_retriever = None
         self.memory_extractor = None
+        self.matts_llm_client = None  # Separate LLM client for MaTTS
         self._init_memory()
 
     def _init_memory(self) -> None:
@@ -143,9 +147,14 @@ class Evaluator:
                     max_tokens=self.config.llm.max_tokens,
                 )
 
+            # Initialize MaTTS-specific LLM client if MaTTS is enabled
+            if self.config.memory.matts.enabled:
+                self._init_matts_client()
+
             logger.info(
                 f"Memory system initialized: mode={self.config.memory.mode}, "
-                f"store_size={self.memory_store.size()}"
+                f"store_size={self.memory_store.size()}, "
+                f"matts={self.config.memory.matts.enabled}"
             )
 
         except Exception as e:
@@ -154,6 +163,31 @@ class Evaluator:
             self.memory_store = None
             self.memory_retriever = None
             self.memory_extractor = None
+            self.matts_llm_client = None
+
+    def _init_matts_client(self) -> None:
+        """Initialize separate LLM client for MaTTS with different parameters."""
+        matts_config = self.config.memory.matts
+        
+        # Create LLM config for MaTTS with higher temperature
+        matts_llm_config = LLMConfig(
+            api_base_url=self.config.llm.api_base_url,
+            api_key=self.config.llm.api_key,
+            model=self.config.llm.model,
+            temperature=matts_config.temperature,  # Higher temperature for diversity
+            max_tokens=matts_config.max_tokens,
+            timeout=self.config.llm.timeout,
+            enable_thinking=matts_config.enable_thinking,  # MaTTS-specific thinking mode
+        )
+        
+        self.matts_llm_client = LLMClient(matts_llm_config, self.config.retry)
+        
+        logger.info(
+            f"MaTTS LLM client initialized: "
+            f"sample_n={matts_config.sample_n}, "
+            f"temperature={matts_config.temperature}, "
+            f"enable_thinking={matts_config.enable_thinking}"
+        )
 
     def _load_checkpoint(self) -> None:
         """Load checkpoint if exists."""
@@ -253,6 +287,30 @@ class Evaluator:
             logger.error(f"Memory retrieval failed: {e}")
             return []
 
+    def _build_trajectory_data(self, result: GameResult) -> TrajectoryData:
+        """Build trajectory data dict from game result.
+
+        Args:
+            result: Game result to convert.
+
+        Returns:
+            Trajectory data dict with trajectory, is_success, total_steps, initial_observation.
+        """
+        trajectory = []
+        for i, action in enumerate(result.actions):
+            obs = result.observations[i + 1] if i + 1 < len(result.observations) else ""
+            trajectory.append({
+                "action": action,
+                "observation": obs,
+            })
+
+        return {
+            "trajectory": trajectory,
+            "is_success": result.success,
+            "total_steps": result.steps,
+            "initial_observation": result.observations[0] if result.observations else "",
+        }
+
     def _extract_and_store_memory(self, result: GameResult) -> None:
         """Extract memory from game result and store it.
 
@@ -263,22 +321,14 @@ class Evaluator:
             return
 
         try:
-            # Build trajectory from result
-            trajectory = []
-            for i, action in enumerate(result.actions):
-                obs = result.observations[i + 1] if i + \
-                    1 < len(result.observations) else ""
-                trajectory.append({
-                    "action": action,
-                    "observation": obs,
-                })
+            traj_data = self._build_trajectory_data(result)
 
             # Extract memory
             memory = self.memory_extractor.extract(
                 task_id=result.game_id,
                 task_type=result.task_type,
                 goal=result.goal,
-                trajectory=trajectory,
+                trajectory=traj_data["trajectory"],
                 is_success=result.success,
             )
 
@@ -307,8 +357,137 @@ class Evaluator:
             logger.error(f"Memory extraction failed for {result.game_id}: {e}")
             # Don't propagate - extraction failure shouldn't stop evaluation
 
+    def _run_matts_sampling(
+        self,
+        game_file: str,
+        goal: str,
+        retrieved_memories: list,
+    ) -> List[TrajectoryData]:
+        """Run multiple sampling attempts for MaTTS.
+
+        Args:
+            game_file: Path to game file.
+            goal: Task goal description.
+            retrieved_memories: Retrieved memories to use for all samples.
+
+        Returns:
+            List of trajectory data dicts from all samples.
+        """
+        sample_n = self.config.memory.matts.sample_n
+        trajectories: List[TrajectoryData] = []
+
+        tqdm.write(f"  {Colors.info('🎲 MaTTS:')} Sampling {sample_n} trajectories...")
+
+        for i in range(sample_n):
+            env = None
+            try:
+                # Create fresh environment for each sample
+                env = AlfWorldEnv(self.config.data.alfworld_data_path)
+                obs, info = env.reset(game_file)
+
+                # Create agent with MaTTS LLM client (higher temperature)
+                agent = ReActAgent(
+                    llm_client=self.matts_llm_client or self.llm_client,
+                    use_few_shot=self.config.prompt.use_few_shot,
+                    history_length=self.config.prompt.history_length,
+                    debug=False,  # Don't flood debug log with MaTTS samples
+                    retrieved_memories=retrieved_memories,
+                )
+
+                # Run game
+                result = agent.run_game(
+                    env, obs, info, max_steps=self.config.test.max_steps
+                )
+
+                # Build trajectory data
+                traj_data = self._build_trajectory_data(result)
+                trajectories.append(traj_data)
+
+                # Display sampling progress
+                result_tag = Colors.success("✓") if result.success else Colors.warning("✗")
+                tqdm.write(
+                    f"    Sample {i+1}/{sample_n}: {result_tag} "
+                    f"steps={result.steps}"
+                )
+
+            except Exception as e:
+                logger.error(f"MaTTS sample {i+1} failed: {e}")
+                tqdm.write(f"    Sample {i+1}/{sample_n}: {Colors.error('ERROR')} {str(e)[:30]}")
+
+            finally:
+                if env:
+                    env.close()
+
+        return trajectories
+
+    def _run_matts_extraction(
+        self,
+        result: GameResult,
+        all_trajectories: List[TrajectoryData],
+    ) -> None:
+        """Run MaTTS contrastive extraction from multiple trajectories.
+
+        Args:
+            result: Primary game result (for metadata).
+            all_trajectories: List of all trajectory data including the main one.
+        """
+        if not self.memory_extractor or not self.memory_store:
+            return
+
+        if len(all_trajectories) < 2:
+            tqdm.write(f"  {Colors.warning('⚠ MaTTS:')} Not enough trajectories for contrastive extraction")
+            # Fall back to single trajectory extraction
+            self._extract_and_store_memory(result)
+            return
+
+        try:
+            # Display MaTTS extraction info
+            num_success = sum(1 for t in all_trajectories if t.get("is_success", False))
+            num_failed = len(all_trajectories) - num_success
+            tqdm.write(
+                f"  {Colors.info('🔍 MaTTS Extraction:')} "
+                f"{len(all_trajectories)} trajectories "
+                f"({Colors.success(str(num_success) + '✓')} {Colors.warning(str(num_failed) + '✗')})"
+            )
+
+            # Run contrastive extraction with MaTTS LLM client
+            memory = self.memory_extractor.extract_contrastive(
+                task_id=result.game_id,
+                task_type=result.task_type,
+                goal=result.goal,
+                trajectories=all_trajectories,
+                llm_client=self.matts_llm_client,  # Use MaTTS client for extraction
+            )
+
+            if memory:
+                self.memory_store.add(memory)
+                # Display extraction result
+                item_titles = [item.title for item in memory.memory_items[:2]]
+                titles_str = ", ".join(item_titles)
+                if len(memory.memory_items) > 2:
+                    titles_str += f" +{len(memory.memory_items) - 2}"
+                tqdm.write(
+                    f"  {Colors.success('✨ MaTTS Result:')} "
+                    f"{len(memory.memory_items)} items | {titles_str}"
+                )
+
+                if self.config.runtime.debug:
+                    logger.debug(
+                        f"MaTTS extracted memory {memory.memory_id} "
+                        f"({len(memory.memory_items)} items from "
+                        f"{len(all_trajectories)} trajectories)"
+                    )
+            else:
+                tqdm.write(f"  {Colors.warning('⚠ MaTTS:')} No valid items extracted")
+
+        except Exception as e:
+            tqdm.write(f"  {Colors.error('⚠ MaTTS failed:')} {str(e)[:50]}")
+            logger.error(f"MaTTS extraction failed for {result.game_id}: {e}")
+            # Fall back to single trajectory extraction
+            self._extract_and_store_memory(result)
+
     def _run_game(self, game_file: str) -> GameResult:
-        """Run a single game with optional memory support."""
+        """Run a single game with optional memory and MaTTS support."""
         env = None
         try:
             # Create environment and get initial state
@@ -332,9 +511,29 @@ class Evaluator:
             result = agent.run_game(
                 env, obs, info, max_steps=self.config.test.max_steps)
 
-            # Extract and store memory if enabled
+            # Close the main environment before MaTTS sampling
+            env.close()
+            env = None
+
+            # Handle memory extraction
             if self.config.memory.should_extract():
-                self._extract_and_store_memory(result)
+                if self.config.memory.matts.enabled:
+                    # MaTTS mode: sample multiple trajectories
+                    main_traj_data = self._build_trajectory_data(result)
+                    
+                    # Run additional samples
+                    matts_trajectories = self._run_matts_sampling(
+                        game_file, goal, retrieved_memories
+                    )
+                    
+                    # Combine main trajectory with MaTTS samples
+                    all_trajectories = [main_traj_data] + matts_trajectories
+                    
+                    # Run contrastive extraction
+                    self._run_matts_extraction(result, all_trajectories)
+                else:
+                    # Normal single-trajectory extraction
+                    self._extract_and_store_memory(result)
 
             return result
 
@@ -378,6 +577,17 @@ class Evaluator:
                     f"  Bank:     {Colors.info(str(stats['total_memories']))} memories")
             else:
                 print(f"  Bank:     {Colors.warning('Not initialized')}")
+            
+            # Print MaTTS info
+            if self.config.memory.matts.enabled:
+                matts = self.config.memory.matts
+                print(Colors.dim("-" * 40))
+                print(f"  {Colors.highlight('MaTTS:')}")
+                print(f"    Samples:     {Colors.info(str(matts.sample_n))}")
+                print(f"    Temperature: {Colors.info(str(matts.temperature))}")
+                if matts.enable_thinking is not None:
+                    thinking_str = "enabled" if matts.enable_thinking else "disabled"
+                    print(f"    Thinking:    {Colors.info(thinking_str)}")
 
         print(Colors.highlight("=" * 60))
         print()

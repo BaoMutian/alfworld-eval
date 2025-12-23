@@ -64,9 +64,11 @@ class DataConfig:
 class MaTTSConfig:
     """MaTTS (Memory-aware Test-Time Scaling) configuration."""
     enabled: bool = False
-    sample_n: int = 3
-    temperature: float = 0.7
-    max_tokens: int = 1024
+    sample_n: int = 3  # Number of parallel samples
+    temperature: float = 0.7  # Higher temperature for diverse sampling
+    max_tokens: int = 2048  # Max tokens for extraction response
+    # Qwen3 specific: enable thinking mode for MaTTS extraction
+    enable_thinking: Optional[bool] = None
 
 
 @dataclass
@@ -239,6 +241,7 @@ class Config:
                     "sample_n": self.memory.matts.sample_n,
                     "temperature": self.memory.matts.temperature,
                     "max_tokens": self.memory.matts.max_tokens,
+                    "enable_thinking": self.memory.matts.enable_thinking,
                 },
             },
         }

@@ -107,43 +107,54 @@ Return a JSON array of lesson objects:
 
 Output ONLY the JSON array, no additional text."""
 
-# Prompt for contrastive extraction (MaTTS)
-EXTRACTION_PROMPT_CONTRASTIVE = """You are an expert at analyzing multiple task execution trajectories and extracting consistent patterns.
+# System prompt for MaTTS contrastive extraction
+MATTS_SYSTEM_PROMPT = """You are an expert in household task navigation and execution analysis. You will be given a user query (task goal) and multiple trajectories showing how an agent attempted the same task. Some trajectories may be successful, and others may have failed.
 
-{environment_context}
-## Task Context
-- Task Type: {task_type}
-- Task Goal: {goal}
-- Number of Trajectories: {num_trajectories}
+## Guidelines
+Your goal is to compare and contrast these trajectories to identify the most useful and generalizable strategies as memory items.
 
-## Trajectories
-{trajectories}
+Use self-contrast reasoning:
+- Identify patterns and strategies that consistently led to success.
+- Identify mistakes or inefficiencies from failed trajectories and formulate preventative strategies.
+- Prefer strategies that generalize beyond specific objects or exact task variations.
 
-## Instructions
-Compare these {num_trajectories} trajectories for the SAME task and extract insights:
-1. If some succeeded and some failed, identify what distinguishes successful from failed attempts
-2. If all succeeded, identify consistent winning strategies
-3. If all failed, identify common pitfalls to avoid
-
-Extract 1-3 high-quality strategies/lessons that:
-- Are consistent across multiple attempts (not coincidental)
-- Represent general patterns, not task-specific details
-- Could help with similar future tasks
-- Reflect understanding of environment rules and constraints
+## Important notes
+- Think first: Why did some trajectories succeed while others failed?
+- You can extract at most 5 memory items from all trajectories combined.
+- Do not repeat similar or overlapping items.
+- Do not mention specific object IDs (like "apple 1" or "fridge 2") — focus on generalizable behaviors and reasoning patterns.
+- Make sure each memory item captures actionable and transferable insights.
 
 ## Output Format
-Return a JSON array:
+Your output must strictly follow this JSON format:
 ```json
 [
-  {{
-    "title": "Strategy/Lesson Name",
-    "description": "One-sentence summary",
-    "content": "Detailed explanation derived from comparing multiple trajectories"
-  }}
+  {
+    "title": "<short descriptive title>",
+    "description": "<one sentence summary>",
+    "content": "<1-5 sentences describing the insights learned to successfully accomplish similar tasks>"
+  }
 ]
 ```
 
-Output ONLY the JSON array, no additional text."""
+Output ONLY the JSON array, no additional text before or after."""
+
+# Prompt for contrastive extraction (MaTTS)
+EXTRACTION_PROMPT_CONTRASTIVE = """{environment_context}
+
+## Task Context
+- **Task Type:** {task_type}
+- **Task Goal:** {goal}
+- **Total Attempts:** {num_trajectories}
+- **Success/Fail:** {success_summary}
+
+## Trajectories
+
+{trajectories}
+
+---
+
+Based on the above trajectories for the same task, analyze the differences and similarities, then extract high-quality memory items."""
 
 
 def format_trajectory(trajectory: List[Dict[str, str]]) -> str:
@@ -169,20 +180,49 @@ def format_trajectory(trajectory: List[Dict[str, str]]) -> str:
 def format_multiple_trajectories(
     trajectories: List[Dict],
 ) -> str:
-    """Format multiple trajectories for contrastive extraction.
+    """Format multiple trajectories for contrastive extraction (MaTTS).
 
     Args:
-        trajectories: List of trajectory dicts with 'trajectory' and 'is_success' keys.
+        trajectories: List of trajectory dicts with 'trajectory', 'is_success',
+                      'total_steps', and optionally 'initial_observation' keys.
 
     Returns:
-        Formatted string with all trajectories.
+        Formatted string with all trajectories including full context.
     """
     lines = []
     for i, traj_data in enumerate(trajectories, 1):
-        result = "SUCCESS" if traj_data.get("is_success", False) else "FAILED"
-        lines.append(f"=== Trajectory {i} ({result}) ===")
-        lines.append(format_trajectory(traj_data.get("trajectory", [])))
+        is_success = traj_data.get("is_success", False)
+        result = "✓ SUCCESS" if is_success else "✗ FAILED"
+        total_steps = traj_data.get("total_steps", len(traj_data.get("trajectory", [])))
+        
+        lines.append(f"### Trajectory {i} — {result} (Steps: {total_steps})")
         lines.append("")
+        
+        # Include initial observation if available
+        if "initial_observation" in traj_data:
+            lines.append(f"**Initial State:**")
+            lines.append(f"{traj_data['initial_observation']}")
+            lines.append("")
+        
+        # Format trajectory steps
+        lines.append("**Actions and Observations:**")
+        trajectory = traj_data.get("trajectory", [])
+        for step_idx, step in enumerate(trajectory, 1):
+            action = step.get("action", "")
+            observation = step.get("observation", "")
+            lines.append(f"[Step {step_idx}] Action: {action}")
+            lines.append(f"         Observation: {observation}")
+        
+        # Add final result annotation
+        if is_success:
+            lines.append(f"\n→ Task completed successfully in {total_steps} steps.")
+        else:
+            lines.append(f"\n→ Task failed after {total_steps} steps.")
+        
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+    
     return "\n".join(lines)
 
 
@@ -224,17 +264,33 @@ def build_contrastive_extraction_prompt(
     Args:
         task_type: Type of the task.
         goal: Task goal description.
-        trajectories: List of trajectory dicts.
+        trajectories: List of trajectory dicts with 'trajectory', 'is_success',
+                      'total_steps', and optionally 'initial_observation'.
 
     Returns:
         Formatted prompt string.
     """
     formatted_trajectories = format_multiple_trajectories(trajectories)
+    
+    # Build success summary
+    num_success = sum(1 for t in trajectories if t.get("is_success", False))
+    num_failed = len(trajectories) - num_success
+    success_summary = f"{num_success} succeeded, {num_failed} failed"
 
     return EXTRACTION_PROMPT_CONTRASTIVE.format(
         environment_context=ENVIRONMENT_CONTEXT,
         task_type=task_type,
         goal=goal,
         num_trajectories=len(trajectories),
+        success_summary=success_summary,
         trajectories=formatted_trajectories,
     )
+
+
+def get_matts_system_prompt() -> str:
+    """Get system prompt for MaTTS extraction.
+    
+    Returns:
+        MaTTS system prompt string.
+    """
+    return MATTS_SYSTEM_PROMPT

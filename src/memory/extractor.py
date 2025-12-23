@@ -8,6 +8,7 @@ from .schemas import Memory, MemoryEntry
 from .prompts import (
     build_extraction_prompt,
     build_contrastive_extraction_prompt,
+    get_matts_system_prompt,
 )
 from ..logging_utils import log_llm_call
 
@@ -222,6 +223,7 @@ class MemoryExtractor:
         task_type: str,
         goal: str,
         trajectories: List[Dict],
+        llm_client: Optional[Any] = None,
     ) -> Optional[Memory]:
         """Extract memory from multiple trajectories using contrastive analysis.
 
@@ -232,7 +234,13 @@ class MemoryExtractor:
             task_id: Unique task identifier.
             task_type: Type of the task.
             goal: Task goal description.
-            trajectories: List of trajectory dicts with 'trajectory' and 'is_success'.
+            trajectories: List of trajectory dicts with:
+                - 'trajectory': List of action-observation pairs
+                - 'is_success': Whether attempt succeeded
+                - 'total_steps': Number of steps taken
+                - 'initial_observation': (optional) Initial state
+            llm_client: Optional separate LLM client for MaTTS
+                        (may have different config like higher temperature).
 
         Returns:
             Memory object if extraction succeeds, None otherwise.
@@ -242,9 +250,12 @@ class MemoryExtractor:
                 f"No trajectories for contrastive extraction, task {task_id}")
             return None
 
+        # Use provided client or fall back to default
+        client = llm_client if llm_client is not None else self.llm_client
+
         try:
-            # Build contrastive extraction prompt
-            system_prompt = "You are an expert at analyzing task execution and extracting patterns from multiple attempts."
+            # Build contrastive extraction prompt with MaTTS-specific system prompt
+            system_prompt = get_matts_system_prompt()
             prompt = build_contrastive_extraction_prompt(
                 task_type=task_type,
                 goal=goal,
@@ -252,14 +263,17 @@ class MemoryExtractor:
             )
 
             # Call LLM
-            response = self.llm_client.chat_simple(
+            response = client.chat_simple(
                 system_prompt=system_prompt,
                 user_prompt=prompt,
             )
 
             # Log LLM call
+            num_success = sum(1 for t in trajectories if t.get("is_success", False))
+            num_failed = len(trajectories) - num_success
             log_llm_call(
-                f"Contrastive Extraction ({len(trajectories)} trajectories)",
+                f"MaTTS Contrastive Extraction ({len(trajectories)} trajectories: "
+                f"{num_success}✓ {num_failed}✗)",
                 system_prompt,
                 prompt,
                 response,
@@ -271,6 +285,7 @@ class MemoryExtractor:
             if items is None:
                 logger.warning(
                     f"Failed to parse contrastive extraction response for task {task_id}")
+                logger.debug(f"Raw response: {response[:500]}...")
                 return None
 
             memory_items = _validate_memory_items(items)
@@ -283,22 +298,28 @@ class MemoryExtractor:
             # Determine overall success (any success counts)
             any_success = any(t.get("is_success", False) for t in trajectories)
 
-            # Use the first trajectory as representative
-            # (or could combine them)
-            representative_trajectory = trajectories[0].get("trajectory", [])
+            # Combine all trajectories for storage
+            combined_trajectory = []
+            for i, traj_data in enumerate(trajectories, 1):
+                result_marker = "SUCCESS" if traj_data.get("is_success", False) else "FAILED"
+                combined_trajectory.append({
+                    "action": f"--- Trajectory {i} ({result_marker}) ---",
+                    "observation": "",
+                })
+                combined_trajectory.extend(traj_data.get("trajectory", []))
 
             memory = Memory(
                 memory_id=Memory.generate_id(),
                 task_id=task_id,
                 task_type=task_type,
                 query=goal,
-                trajectory=representative_trajectory,
+                trajectory=combined_trajectory,
                 is_success=any_success,
                 memory_items=memory_items,
             )
 
             logger.debug(
-                f"Contrastive extraction: {len(memory_items)} items from "
+                f"MaTTS extraction: {len(memory_items)} items from "
                 f"{len(trajectories)} trajectories for task {task_id}"
             )
 
@@ -306,5 +327,5 @@ class MemoryExtractor:
 
         except Exception as e:
             logger.error(
-                f"Contrastive extraction failed for task {task_id}: {e}")
+                f"MaTTS contrastive extraction failed for task {task_id}: {e}")
             return None

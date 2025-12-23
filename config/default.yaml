@@ -58,8 +58,12 @@ memory:
   similarity_threshold: 0.5
 
   # MaTTS configuration (Memory-aware Test-Time Scaling)
+  # MaTTS runs multiple samples for the same task and uses contrastive
+  # analysis to extract higher-quality experience memories
   matts:
     enabled: false
-    sample_n: 3
-    temperature: 0.7
-    max_tokens: 1024
+    sample_n: 3  # Number of additional samples (total = 1 main + sample_n)
+    temperature: 0.7  # Higher temperature for diverse sampling
+    max_tokens: 2048  # Max tokens for extraction response
+    # Qwen3 thinking mode for MaTTS extraction (for vLLM): true/false/null
+    enable_thinking: null
