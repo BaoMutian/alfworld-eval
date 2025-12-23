@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 def generate_run_id(config: Config) -> str:
     """Generate a stable run ID based on configuration.
-    
+
     All parameters that affect evaluation results should be included in the hash
     to ensure different configurations produce different run IDs.
     """
@@ -290,9 +290,20 @@ class Evaluator:
                 for rm in retrieved:
                     result_tag = Colors.success(
                         "✓") if rm.is_success else Colors.warning("✗")
+                    # Show reference success rate if memory has been referenced before
+                    ref_info = ""
+                    if rm.reference_count > 0:
+                        ref_rate = rm.reference_success_rate
+                        rate_color = (
+                            Colors.BRIGHT_GREEN if ref_rate >= 0.7
+                            else Colors.BRIGHT_YELLOW if ref_rate >= 0.4
+                            else Colors.BRIGHT_RED
+                        )
+                        ref_info = f" | {rate_color}refs:{rm.reference_count} sr:{ref_rate:.0%}{Colors.RESET}"
                     tqdm.write(
                         f"  {Colors.info('📚 Memory:')} {result_tag} "
-                        f"sim={rm.similarity:.2f} | {rm.memory_items[0].title if rm.memory_items else 'No title'}"
+                        f"sim={rm.similarity:.2f}{ref_info} | "
+                        f"{rm.memory_items[0].title if rm.memory_items else 'No title'}"
                     )
 
             if self.config.runtime.debug and retrieved:
@@ -541,6 +552,11 @@ class Evaluator:
             env.close()
             env = None
 
+            # Update reference statistics for used memories
+            if retrieved_memories and self.memory_store:
+                memory_ids = [rm.memory_id for rm in retrieved_memories]
+                self.memory_store.update_reference_stats(memory_ids, result.success)
+
             # Handle memory extraction
             if self.config.memory.should_extract():
                 if self.config.memory.matts.enabled:
@@ -758,6 +774,20 @@ class Evaluator:
             print(f"    Total memories:   {stats['total_memories']}")
             print(f"    Success memories: {stats['success_memories']}")
             print(f"    Failure memories: {stats['failure_memories']}")
+            
+            # Reference statistics
+            if stats['total_references'] > 0:
+                ref_rate = stats['overall_reference_success_rate']
+                ref_rate_color = (
+                    Colors.BRIGHT_GREEN if ref_rate >= 0.7
+                    else Colors.BRIGHT_YELLOW if ref_rate >= 0.4
+                    else Colors.BRIGHT_RED
+                )
+                print(f"    Referenced:       {stats['referenced_memories']} memories")
+                print(f"    Total refs:       {stats['total_references']}")
+                print(
+                    f"    Ref success rate: {ref_rate_color}{ref_rate:.1%}{Colors.RESET}"
+                )
 
         print()
         print(Colors.highlight("=" * 60))

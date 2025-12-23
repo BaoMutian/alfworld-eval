@@ -243,6 +243,50 @@ class MemoryStore:
 
         logger.info("Cleared all memories")
 
+    def update_reference_stats(
+        self,
+        memory_ids: List[str],
+        task_success: bool,
+    ) -> None:
+        """Update reference statistics for memories.
+        
+        Called after a task completes to update the reference count and
+        success count for all memories that were used.
+        
+        Args:
+            memory_ids: List of memory IDs that were referenced.
+            task_success: Whether the task that referenced these memories succeeded.
+        """
+        if not memory_ids:
+            return
+
+        updated = False
+        for memory_id in memory_ids:
+            idx = self._memory_id_to_idx.get(memory_id)
+            if idx is not None:
+                self._memories[idx].reference_count += 1
+                if task_success:
+                    self._memories[idx].reference_success_count += 1
+                updated = True
+                logger.debug(
+                    f"Updated memory {memory_id}: refs={self._memories[idx].reference_count}, "
+                    f"success_rate={self._memories[idx].reference_success_rate:.2%}"
+                )
+
+        # Persist changes to disk
+        if updated:
+            self._save_all_memories()
+
+    def _save_all_memories(self) -> None:
+        """Save all memories to disk (overwrites existing file)."""
+        try:
+            with open(self.memories_path, "w", encoding="utf-8") as f:
+                for memory in self._memories:
+                    f.write(json.dumps(memory.to_dict(), ensure_ascii=False) + "\n")
+            logger.debug(f"Saved {len(self._memories)} memories to {self.memories_path}")
+        except Exception as e:
+            logger.error(f"Failed to save memories: {e}")
+
     def get_stats(self) -> dict:
         """Get statistics about the memory store.
         
@@ -251,6 +295,11 @@ class MemoryStore:
         """
         success_count = sum(1 for m in self._memories if m.is_success)
         failure_count = len(self._memories) - success_count
+
+        # Reference statistics
+        total_refs = sum(m.reference_count for m in self._memories)
+        total_ref_successes = sum(m.reference_success_count for m in self._memories)
+        referenced_memories = sum(1 for m in self._memories if m.reference_count > 0)
 
         task_types = {}
         for m in self._memories:
@@ -265,5 +314,12 @@ class MemoryStore:
             "task_types": task_types,
             "memories_path": str(self.memories_path),
             "embeddings_path": str(self.embeddings_path),
+            # Reference statistics
+            "total_references": total_refs,
+            "total_reference_successes": total_ref_successes,
+            "referenced_memories": referenced_memories,
+            "overall_reference_success_rate": (
+                total_ref_successes / total_refs if total_refs > 0 else 0.0
+            ),
         }
 

@@ -50,6 +50,20 @@ class Memory:
     is_success: bool
     memory_items: List[MemoryEntry] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    # Reference tracking: how often this memory is used and how often it leads to success
+    reference_count: int = 0
+    reference_success_count: int = 0
+
+    @property
+    def reference_success_rate(self) -> float:
+        """Calculate success rate when this memory is referenced.
+        
+        Returns:
+            Success rate (0.0-1.0), or 0.0 if never referenced.
+        """
+        if self.reference_count == 0:
+            return 0.0
+        return self.reference_success_count / self.reference_count
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -62,6 +76,8 @@ class Memory:
             "is_success": self.is_success,
             "memory_items": [item.to_dict() for item in self.memory_items],
             "created_at": self.created_at,
+            "reference_count": self.reference_count,
+            "reference_success_count": self.reference_success_count,
         }
 
     @classmethod
@@ -80,6 +96,8 @@ class Memory:
             is_success=data.get("is_success", False),
             memory_items=memory_items,
             created_at=data.get("created_at", datetime.now().isoformat()),
+            reference_count=data.get("reference_count", 0),
+            reference_success_count=data.get("reference_success_count", 0),
         )
 
     @staticmethod
@@ -117,6 +135,14 @@ class RetrievedMemory:
     def memory_items(self) -> List[MemoryEntry]:
         return self.memory.memory_items
 
+    @property
+    def reference_count(self) -> int:
+        return self.memory.reference_count
+
+    @property
+    def reference_success_rate(self) -> float:
+        return self.memory.reference_success_rate
+
     def get_summary(self) -> Dict[str, Any]:
         """Get summary for logging/results."""
         return {
@@ -125,5 +151,7 @@ class RetrievedMemory:
             "query": self.query[:100] + "..." if len(self.query) > 100 else self.query,
             "is_success": self.is_success,
             "num_items": len(self.memory_items),
+            "reference_count": self.reference_count,
+            "reference_success_rate": round(self.reference_success_rate, 4),
         }
 
