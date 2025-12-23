@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 @dataclass
 class MemoryEntry:
     """A single memory entry containing extracted reasoning strategy.
-    
+
     Each memory entry represents a distilled piece of knowledge
     that can be applied to similar tasks.
     """
@@ -38,7 +38,7 @@ class MemoryEntry:
 @dataclass
 class Memory:
     """A complete memory item containing task context and extracted strategies.
-    
+
     Stores the full context of a task execution including the trajectory
     and the distilled memory entries for future retrieval.
     """
@@ -57,7 +57,7 @@ class Memory:
     @property
     def reference_success_rate(self) -> float:
         """Calculate success rate when this memory is referenced.
-        
+
         Returns:
             Success rate (0.0-1.0), or 0.0 if never referenced.
         """
@@ -84,7 +84,7 @@ class Memory:
     def from_dict(cls, data: Dict[str, Any]) -> "Memory":
         """Create from dictionary."""
         memory_items = [
-            MemoryEntry.from_dict(item) 
+            MemoryEntry.from_dict(item)
             for item in data.get("memory_items", [])
         ]
         return cls(
@@ -109,7 +109,7 @@ class Memory:
 @dataclass
 class RetrievedMemory:
     """A memory retrieved from the memory bank with similarity score.
-    
+
     Used to pass retrieval results to the prompt builder.
     """
     memory: Memory
@@ -154,4 +154,3 @@ class RetrievedMemory:
             "reference_count": self.reference_count,
             "reference_success_rate": round(self.reference_success_rate, 4),
         }
-

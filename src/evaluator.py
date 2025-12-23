@@ -555,7 +555,8 @@ class Evaluator:
             # Update reference statistics for used memories
             if retrieved_memories and self.memory_store:
                 memory_ids = [rm.memory_id for rm in retrieved_memories]
-                self.memory_store.update_reference_stats(memory_ids, result.success)
+                self.memory_store.update_reference_stats(
+                    memory_ids, result.success)
 
             # Handle memory extraction
             if self.config.memory.should_extract():
@@ -774,7 +775,7 @@ class Evaluator:
             print(f"    Total memories:   {stats['total_memories']}")
             print(f"    Success memories: {stats['success_memories']}")
             print(f"    Failure memories: {stats['failure_memories']}")
-            
+
             # Reference statistics
             if stats['total_references'] > 0:
                 ref_rate = stats['overall_reference_success_rate']
@@ -783,7 +784,8 @@ class Evaluator:
                     else Colors.BRIGHT_YELLOW if ref_rate >= 0.4
                     else Colors.BRIGHT_RED
                 )
-                print(f"    Referenced:       {stats['referenced_memories']} memories")
+                print(
+                    f"    Referenced:       {stats['referenced_memories']} memories")
                 print(f"    Total refs:       {stats['total_references']}")
                 print(
                     f"    Ref success rate: {ref_rate_color}{ref_rate:.1%}{Colors.RESET}"

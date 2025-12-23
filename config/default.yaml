@@ -19,7 +19,7 @@ retry:
 
 # Test Configuration
 test:
-  num_games: 1
+  num_games: 10
   task_types: null # null means all types, or list like [1, 2, 3, 4, 5, 6]
   split: "valid_seen"
   seed: 42
@@ -54,7 +54,7 @@ memory:
   embedding_device: "cuda:0"
 
   # Retrieval parameters
-  top_k: 3
+  top_k: 2
   similarity_threshold: 0.5
 
   # MaTTS configuration (Memory-aware Test-Time Scaling)
