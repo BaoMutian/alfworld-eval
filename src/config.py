@@ -76,19 +76,19 @@ class MemoryConfig:
     """Memory system configuration."""
     enabled: bool = False
     mode: str = "baseline"  # baseline | retrieve_only | retrieve_and_extract
-    
+
     # Storage configuration
     memory_dir: str = "memory_banks"
     task_name: str = "alfworld"
-    
+
     # Embedding model configuration
     embedding_model: str = "BAAI/bge-base-en-v1.5"
     embedding_device: str = "cpu"
-    
+
     # Retrieval parameters
     top_k: int = 1
     similarity_threshold: float = 0.5
-    
+
     # MaTTS configuration
     matts: MaTTSConfig = field(default_factory=MaTTSConfig)
 
@@ -135,7 +135,8 @@ class Config:
             config.prompt = PromptConfig(**data["prompt"])
         if "runtime" in data:
             # Filter out parallel_workers if present (deprecated)
-            runtime_data = {k: v for k, v in data["runtime"].items() if k != "parallel_workers"}
+            runtime_data = {
+                k: v for k, v in data["runtime"].items() if k != "parallel_workers"}
             config.runtime = RuntimeConfig(**runtime_data)
         if "data" in data:
             config.data = DataConfig(**data["data"])
@@ -168,20 +169,23 @@ class Config:
         # Check split
         valid_splits = ["valid_seen", "valid_train", "valid_unseen", "train"]
         if self.test.split not in valid_splits:
-            raise ValueError(f"Invalid split: {self.test.split}. Must be one of {valid_splits}")
+            raise ValueError(
+                f"Invalid split: {self.test.split}. Must be one of {valid_splits}")
 
         # Check task types
         valid_task_types = [1, 2, 3, 4, 5, 6]
         if self.test.task_types is not None:
             for t in self.test.task_types:
                 if t not in valid_task_types:
-                    raise ValueError(f"Invalid task type: {t}. Must be one of {valid_task_types}")
+                    raise ValueError(
+                        f"Invalid task type: {t}. Must be one of {valid_task_types}")
 
         # Create output directory
         Path(self.runtime.output_dir).mkdir(parents=True, exist_ok=True)
 
         # Validate memory configuration
-        valid_memory_modes = ["baseline", "retrieve_only", "retrieve_and_extract"]
+        valid_memory_modes = ["baseline",
+                              "retrieve_only", "retrieve_and_extract"]
         if self.memory.mode not in valid_memory_modes:
             raise ValueError(
                 f"Invalid memory mode: {self.memory.mode}. "

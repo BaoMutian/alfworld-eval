@@ -31,7 +31,8 @@ from .logging_utils import (
 )
 
 # Type for trajectory data used in MaTTS
-TrajectoryData = dict  # Contains: trajectory, is_success, total_steps, initial_observation
+# Contains: trajectory, is_success, total_steps, initial_observation
+TrajectoryData = dict
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ class Evaluator:
     def _init_matts_client(self) -> None:
         """Initialize separate LLM client for MaTTS with different parameters."""
         matts_config = self.config.memory.matts
-        
+
         # Create LLM config for MaTTS with higher temperature
         matts_llm_config = LLMConfig(
             api_base_url=self.config.llm.api_base_url,
@@ -179,9 +180,9 @@ class Evaluator:
             timeout=self.config.llm.timeout,
             enable_thinking=matts_config.enable_thinking,  # MaTTS-specific thinking mode
         )
-        
+
         self.matts_llm_client = LLMClient(matts_llm_config, self.config.retry)
-        
+
         logger.info(
             f"MaTTS LLM client initialized: "
             f"sample_n={matts_config.sample_n}, "
@@ -298,7 +299,8 @@ class Evaluator:
         """
         trajectory = []
         for i, action in enumerate(result.actions):
-            obs = result.observations[i + 1] if i + 1 < len(result.observations) else ""
+            obs = result.observations[i + 1] if i + \
+                1 < len(result.observations) else ""
             trajectory.append({
                 "action": action,
                 "observation": obs,
@@ -376,7 +378,8 @@ class Evaluator:
         sample_n = self.config.memory.matts.sample_n
         trajectories: List[TrajectoryData] = []
 
-        tqdm.write(f"  {Colors.info('🎲 MaTTS:')} Sampling {sample_n} trajectories...")
+        tqdm.write(
+            f"  {Colors.info('🎲 MaTTS:')} Sampling {sample_n} trajectories...")
 
         for i in range(sample_n):
             env = None
@@ -404,7 +407,8 @@ class Evaluator:
                 trajectories.append(traj_data)
 
                 # Display sampling progress
-                result_tag = Colors.success("✓") if result.success else Colors.warning("✗")
+                result_tag = Colors.success(
+                    "✓") if result.success else Colors.warning("✗")
                 tqdm.write(
                     f"    Sample {i+1}/{sample_n}: {result_tag} "
                     f"steps={result.steps}"
@@ -412,7 +416,8 @@ class Evaluator:
 
             except Exception as e:
                 logger.error(f"MaTTS sample {i+1} failed: {e}")
-                tqdm.write(f"    Sample {i+1}/{sample_n}: {Colors.error('ERROR')} {str(e)[:30]}")
+                tqdm.write(
+                    f"    Sample {i+1}/{sample_n}: {Colors.error('ERROR')} {str(e)[:30]}")
 
             finally:
                 if env:
@@ -435,14 +440,16 @@ class Evaluator:
             return
 
         if len(all_trajectories) < 2:
-            tqdm.write(f"  {Colors.warning('⚠ MaTTS:')} Not enough trajectories for contrastive extraction")
+            tqdm.write(
+                f"  {Colors.warning('⚠ MaTTS:')} Not enough trajectories for contrastive extraction")
             # Fall back to single trajectory extraction
             self._extract_and_store_memory(result)
             return
 
         try:
             # Display MaTTS extraction info
-            num_success = sum(1 for t in all_trajectories if t.get("is_success", False))
+            num_success = sum(
+                1 for t in all_trajectories if t.get("is_success", False))
             num_failed = len(all_trajectories) - num_success
             tqdm.write(
                 f"  {Colors.info('🔍 MaTTS Extraction:')} "
@@ -478,7 +485,8 @@ class Evaluator:
                         f"{len(all_trajectories)} trajectories)"
                     )
             else:
-                tqdm.write(f"  {Colors.warning('⚠ MaTTS:')} No valid items extracted")
+                tqdm.write(
+                    f"  {Colors.warning('⚠ MaTTS:')} No valid items extracted")
 
         except Exception as e:
             tqdm.write(f"  {Colors.error('⚠ MaTTS failed:')} {str(e)[:50]}")
@@ -520,15 +528,15 @@ class Evaluator:
                 if self.config.memory.matts.enabled:
                     # MaTTS mode: sample multiple trajectories
                     main_traj_data = self._build_trajectory_data(result)
-                    
+
                     # Run additional samples
                     matts_trajectories = self._run_matts_sampling(
                         game_file, goal, retrieved_memories
                     )
-                    
+
                     # Combine main trajectory with MaTTS samples
                     all_trajectories = [main_traj_data] + matts_trajectories
-                    
+
                     # Run contrastive extraction
                     self._run_matts_extraction(result, all_trajectories)
                 else:
@@ -577,14 +585,15 @@ class Evaluator:
                     f"  Bank:     {Colors.info(str(stats['total_memories']))} memories")
             else:
                 print(f"  Bank:     {Colors.warning('Not initialized')}")
-            
+
             # Print MaTTS info
             if self.config.memory.matts.enabled:
                 matts = self.config.memory.matts
                 print(Colors.dim("-" * 40))
                 print(f"  {Colors.highlight('MaTTS:')}")
                 print(f"    Samples:     {Colors.info(str(matts.sample_n))}")
-                print(f"    Temperature: {Colors.info(str(matts.temperature))}")
+                print(
+                    f"    Temperature: {Colors.info(str(matts.temperature))}")
                 if matts.enable_thinking is not None:
                     thinking_str = "enabled" if matts.enable_thinking else "disabled"
                     print(f"    Thinking:    {Colors.info(thinking_str)}")

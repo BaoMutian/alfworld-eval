@@ -269,7 +269,8 @@ class MemoryExtractor:
             )
 
             # Log LLM call
-            num_success = sum(1 for t in trajectories if t.get("is_success", False))
+            num_success = sum(
+                1 for t in trajectories if t.get("is_success", False))
             num_failed = len(trajectories) - num_success
             log_llm_call(
                 f"MaTTS Contrastive Extraction ({len(trajectories)} trajectories: "
@@ -301,7 +302,8 @@ class MemoryExtractor:
             # Combine all trajectories for storage
             combined_trajectory = []
             for i, traj_data in enumerate(trajectories, 1):
-                result_marker = "SUCCESS" if traj_data.get("is_success", False) else "FAILED"
+                result_marker = "SUCCESS" if traj_data.get(
+                    "is_success", False) else "FAILED"
                 combined_trajectory.append({
                     "action": f"--- Trajectory {i} ({result_marker}) ---",
                     "observation": "",

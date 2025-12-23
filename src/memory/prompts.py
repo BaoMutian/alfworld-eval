@@ -193,17 +193,18 @@ def format_multiple_trajectories(
     for i, traj_data in enumerate(trajectories, 1):
         is_success = traj_data.get("is_success", False)
         result = "✓ SUCCESS" if is_success else "✗ FAILED"
-        total_steps = traj_data.get("total_steps", len(traj_data.get("trajectory", [])))
-        
+        total_steps = traj_data.get(
+            "total_steps", len(traj_data.get("trajectory", [])))
+
         lines.append(f"### Trajectory {i} — {result} (Steps: {total_steps})")
         lines.append("")
-        
+
         # Include initial observation if available
         if "initial_observation" in traj_data:
             lines.append(f"**Initial State:**")
             lines.append(f"{traj_data['initial_observation']}")
             lines.append("")
-        
+
         # Format trajectory steps
         lines.append("**Actions and Observations:**")
         trajectory = traj_data.get("trajectory", [])
@@ -212,17 +213,18 @@ def format_multiple_trajectories(
             observation = step.get("observation", "")
             lines.append(f"[Step {step_idx}] Action: {action}")
             lines.append(f"         Observation: {observation}")
-        
+
         # Add final result annotation
         if is_success:
-            lines.append(f"\n→ Task completed successfully in {total_steps} steps.")
+            lines.append(
+                f"\n→ Task completed successfully in {total_steps} steps.")
         else:
             lines.append(f"\n→ Task failed after {total_steps} steps.")
-        
+
         lines.append("")
         lines.append("---")
         lines.append("")
-    
+
     return "\n".join(lines)
 
 
@@ -271,7 +273,7 @@ def build_contrastive_extraction_prompt(
         Formatted prompt string.
     """
     formatted_trajectories = format_multiple_trajectories(trajectories)
-    
+
     # Build success summary
     num_success = sum(1 for t in trajectories if t.get("is_success", False))
     num_failed = len(trajectories) - num_success
@@ -289,7 +291,7 @@ def build_contrastive_extraction_prompt(
 
 def get_matts_system_prompt() -> str:
     """Get system prompt for MaTTS extraction.
-    
+
     Returns:
         MaTTS system prompt string.
     """
